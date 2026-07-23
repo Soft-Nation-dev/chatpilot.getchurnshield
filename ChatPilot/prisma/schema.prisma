@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model companies {
+  id                         Int                     @id(map: "poc_clinics_companies_pkey") @default(autoincrement())
+  created_at                 DateTime                @default(now()) @db.Timestamptz(6)
+  name                       String                  @db.VarChar
+  cal_event_type_id          BigInt?                 @default(0)
+  cal_event_slug             String?                 @db.VarChar
+  cal_api_key                String?                 @db.VarChar
+  cal_booking_length         BigInt?
+  phone                      BigInt                  @unique(map: "unique phone")
+  updated_at                 DateTime?               @db.Timestamptz(6)
+  is_bot_activated           Boolean?                @default(true)
+  session_id                 String?                 @unique(map: "poc_clinics_companies_wapi_id_key")
+  whatsapp_connection_status Boolean?
+  assistant_id               Int?
+  business_details           Json?
+  email                      String?                 @db.VarChar
+  monthly_lead_quota         Int?                    @default(300)
+  daily_lead_limit           Int?                    @default(50)
+  pool_cursor                Int                     @default(-1)
+  assistant_instructions     assistant_instructions? @relation(fields: [assistant_id], references: [id])
+  contacts                   contacts[]
+  users                      users[]
+  company_assets             company_assets[]
+  leads                      leads[]
+  lead_requests              lead_requests[]
+}
+
+model users {
+  id           Int       @id @default(autoincrement())
+  phone        String    @unique @db.VarChar
+  password     String
+  company_id   Int
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @updatedAt @db.Timestamptz(6)
+  company_name   String?   @db.VarChar
+  otp_code       String?   @db.VarChar(6)
+  otp_expires_at DateTime? @db.Timestamptz(6)
+  company        companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+}
+
+model contacts {
+  id                       Int                @id(map: "poc_clinics_contacts_pkey") @default(autoincrement())
+  created_at               DateTime?          @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime?          @default(now()) @db.Timestamptz(6)
+  name                     String?            @db.VarChar
+  phone                    BigInt?
+  schedule_event           Json?              @db.Json
+  last_message_received    DateTime           @default(now()) @db.Timestamptz(6)
+  total_messages           Int                @default(0)
+  needs_review             Boolean            @default(false)
+  company_id               Int?               @default(1)
+  photo_url                String?            @db.VarChar
+  is_bot_activated         Boolean?           @default(true)
+  crm_appointment_at       DateTime?          @db.Timestamptz(6)
+  crm_appointment_id       String?            @db.VarChar
+  whatsapp_profile_name    String?
+  contact_stop_date        DateTime?          @db.Timestamptz(6)
+  is_replies_activated     Boolean?           @default(true)
+  is_follow_up_sent        Boolean            @default(false)
+  lid                      BigInt?
+  companies                companies?         @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "poc_clinics_contacts_company_id_fk")
+  messages                 messages[]
+
+  @@unique([company_id, phone], map: "poc_clinics_contacts_company_phone_key")
+}
+
+model messages {
+  id                    Int       @id @default(autoincrement())
+  contact_id            Int
+  sender_phone          BigInt?
+  message               String
+  image_url             String?
+  sent_at               DateTime? @default(now()) @db.Timestamp(6)
+  is_read               Boolean?  @default(false)
+  message_type          String?   @default("text") @db.VarChar(50)
+  author_type           String    @default("bot") @db.VarChar(50)
+  processed             Boolean   @default(false)
+  original_message_type String?   @default("text") @db.VarChar(50)
+  wb_id                 String?   @db.VarChar
+  contacts              contacts  @relation(fields: [contact_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model assistant_instructions {
+  id            Int         @id(map: "poc_assistant_instructions_pkey") @default(autoincrement())
+  model         String?     @default("gemini-2.5-flash")
+  temperature   Float?      @default(0.1)
+  system_prompt String?
+  companies     companies[]
+}
+
+model company_assets {
+  id          Int       @id @default(autoincrement())
+  company_id  Int
+  file_url    String
+  file_type   String    @db.VarChar(20)
+  file_name   String    @db.VarChar(255)
+  description String?
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  company     companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+}
+
+model leads {
+  id              Int       @id @default(autoincrement())
+  company_id      Int
+  name            String?   @db.VarChar
+  phone           BigInt?
+  email           String?   @db.VarChar
+  website         String?   @db.VarChar
+  address         String?   @db.VarChar
+  source          String?   @db.VarChar
+  source_id       String?   @db.VarChar
+  raw_text        String?
+  location_state  String?   @db.VarChar
+  status          String    @default("new") @db.VarChar
+  qual_score      Float     @default(0)
+  notes           String?
+  is_bot_activated Boolean  @default(true)
+  contact_id      Int?
+  last_contact_at DateTime? @db.Timestamptz(6)
+  created_at      DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime? @updatedAt @db.Timestamptz(6)
+  company         companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@unique([company_id, phone])
+  @@index([company_id, status])
+}
+
+model lead_requests {
+  id         Int       @id @default(autoincrement())
+  company_id Int
+  target     Int       @default(0)
+  found      Int       @default(0)
+  status     String    @default("pending") @db.VarChar
+  sources    String?   @db.VarChar
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime? @updatedAt @db.Timestamptz(6)
+  company    companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+}
+
+model pool {
+  id             Int      @id @default(autoincrement())
+  name           String?  @db.VarChar
+  phone          BigInt   @unique
+  email          String?  @db.VarChar
+  website        String?  @db.VarChar
+  address        String?  @db.VarChar
+  source         String?  @db.VarChar
+  source_id      String?  @db.VarChar
+  raw_text       String?
+  location_state String?  @db.VarChar
+  qual_score     Float    @default(0)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+}
+
+model whats_app_session {
+  id        Int      @id @default(autoincrement())
+  sessionId String   @unique
+  creds     Json?
+  keys      Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId], map: "idx_whats_app_session_sessionId")
+}

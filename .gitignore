@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Env
+.env
+.env.local
+*.local
+
+# Build output
+dist/
+.next/
+out/
+
+# Logs
+*.log
+logs/
+
+# Database (SQLite dev)
+**/dev.db
+**/dev.db-journal
+**/prisma/dev.db
+
+# WhatsApp session (Baileys) — never commit this, it is a live login
+auth_session/
+
+# Deployment config — kept out of the repo
+deployment/
+
+.DS_Store
