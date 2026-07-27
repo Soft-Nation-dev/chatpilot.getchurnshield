@@ -56,7 +56,7 @@ export class UnifiedMessageProcessingService {
     this.logger.log(`dateAugmentedText: ${dateAugmentedText}`)
     this.logger.log(`Using Gemini for company ${companyId}`)
 
-    const chatHistory = await this.contactService.getAiChatHistory(
+    const chatHistory = await this.contactService.getAiChatHistoryMultimodal(
       contact.id,
       true,
     )

@@ -14,6 +14,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CompanyService } from '../company/company.service';
+import { CompanyAccessService } from '../company/company-access.service';
 import { LeadsService } from './services/leads.service';
 import { BotToggleDto, RequestLeadsDto, SendLeadMessageDto } from './dto/leads.dto';
 
@@ -25,11 +26,11 @@ export class LeadsController {
   constructor(
     private readonly leadsService: LeadsService,
     private readonly companyService: CompanyService,
+    private readonly companyAccess: CompanyAccessService,
   ) {}
 
   private async verifyOwnership(userId: number, companyId: number) {
-    const owns = await this.companyService.userOwnsCompany(userId, companyId);
-    if (!owns) throw new ForbiddenException('You do not own this company');
+    await this.companyAccess.assertAccess({ userId }, companyId);
   }
 
   @ApiOperation({ summary: 'List leads' })

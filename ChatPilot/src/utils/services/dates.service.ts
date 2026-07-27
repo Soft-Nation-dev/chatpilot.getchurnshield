@@ -4,7 +4,7 @@ import { DateTime } from 'luxon'
 
 @Injectable()
 export class DatesHelper {
-  private readonly TIMEZONE = 'America/Sao_Paulo'
+  private readonly TIMEZONE = process.env.DEFAULT_TIMEZONE || 'Africa/Lagos'
   private readonly logger = new Logger(DatesHelper.name)
   private readonly WEEKDAY_NAMES = {
     '1': 'Monday',

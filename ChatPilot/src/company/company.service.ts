@@ -14,6 +14,10 @@ import { SupabaseStorageService } from 'src/utils/services/supabase-storage.serv
 import { generateText } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { decryptMessagesInPlace } from 'src/common/crypto/message-crypto'
+import {
+  decryptContactFields,
+  decryptContactsInPlace,
+} from 'src/common/crypto/contact-crypto'
 
 const OTP_TTL_MS = 60 * 1000
 
@@ -366,6 +370,8 @@ Generate ONLY the system prompt text, no explanations.`,
       }
     }
 
+    decryptContactsInPlace(contacts)
+
     return {
       data: contacts,
       total,
@@ -386,7 +392,10 @@ Generate ONLY the system prompt text, no explanations.`,
       orderBy: { sent_at: 'asc' },
     })
 
-    return { contact, messages: decryptMessagesInPlace(messages) }
+    return {
+      contact: decryptContactFields(contact),
+      messages: decryptMessagesInPlace(messages),
+    }
   }
 
   async sendDeleteOtp(companyId: number) {

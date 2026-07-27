@@ -14,6 +14,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto'
 import { ForgotPasswordDto } from './dto/forgot-password.dto'
 import { VerifyOtpDto } from './dto/verify-otp.dto'
 import { ResetPasswordDto } from './dto/reset-password.dto'
+import { AcceptInviteDto } from './dto/accept-invite.dto'
 import { JwtAuthGuard } from './guards/jwt-auth.guard'
 
 @ApiTags('Auth')
@@ -63,5 +64,11 @@ export class AuthController {
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto)
+  }
+
+  @ApiOperation({ summary: 'Accept a team invitation and set a password' })
+  @Post('accept-invite')
+  acceptInvite(@Body() dto: AcceptInviteDto) {
+    return this.authService.acceptInvite(dto)
   }
 }

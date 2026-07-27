@@ -12,6 +12,7 @@ import {
   BUILTIN_TOOL_INSTRUCTIONS,
   buildAssetsPrompt,
 } from '../constants/builtin-prompt'
+import { REAL_ESTATE_KNOWLEDGE } from '../constants/real-estate-prompt'
 
 const DEFAULT_MODEL: GeminiModelKey = 'gemini-2.5-flash'
 
@@ -77,7 +78,11 @@ export class AiAssistantConfigService {
       const companyPrompt =
         assistant.system_prompt ?? 'You are a helpful AI assistant.'
       const assetsPrompt = buildAssetsPrompt(assets)
-      const fullSystemPrompt = `${BUILTIN_TOOL_INSTRUCTIONS}\n\n## Your Role & Instructions\n\n${companyPrompt}${assetsPrompt}`
+      const verticalPrompt =
+        (company as any).vertical === 'real_estate'
+          ? `\n\n${REAL_ESTATE_KNOWLEDGE}`
+          : ''
+      const fullSystemPrompt = `${BUILTIN_TOOL_INSTRUCTIONS}${verticalPrompt}\n\n## Your Role & Instructions\n\n${companyPrompt}${assetsPrompt}`
 
       return {
         systemPrompt: fullSystemPrompt,

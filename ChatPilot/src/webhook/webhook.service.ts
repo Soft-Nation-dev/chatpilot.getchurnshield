@@ -9,6 +9,18 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { generateText } from 'ai'
 import { WhatsBaileyDto } from './dto/whats-bailey.dto'
 import { WbConnectionUpdateDto } from './dto/wb-connection-update.dto'
+import { SocialAttributionService } from 'src/social/services/social-attribution.service'
+
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic']
+
+function isImageMediaRef(url?: string | null, mimeType?: string | null) {
+  const mime = (mimeType || '').split(';')[0].trim().toLowerCase()
+  if (mime.startsWith('image/')) return true
+  if (mime) return false
+  const clean = (url || '').split('?')[0].split('#')[0]
+  const ext = clean.split('.').pop()?.toLowerCase() ?? ''
+  return IMAGE_EXTENSIONS.includes(ext)
+}
 
 @Injectable()
 export class WebhookService {
@@ -18,6 +30,7 @@ export class WebhookService {
     private readonly replyService: ReplyService,
     private readonly companyService: CompanyService,
     private readonly supabaseStorageService: SupabaseStorageService,
+    private readonly socialAttribution: SocialAttributionService,
   ) {}
 
   private async processWebhook({
@@ -31,6 +44,7 @@ export class WebhookService {
     userlid,
     isFromLid,
     wbId,
+    mediaUrl,
   }: {
     message: string
     userPhone: bigint | null
@@ -42,6 +56,7 @@ export class WebhookService {
     userlid?: bigint | null
     isFromLid?: boolean
     wbId?: string | null
+    mediaUrl?: string | null
   }) {
     try {
       const company = await this.companyService.findByPhone(
@@ -107,8 +122,14 @@ export class WebhookService {
             message,
             originalMessageType,
             wbId ?? null,
+            mediaUrl ?? null,
           ),
         ])
+
+        this.socialAttribution
+          .attachIfSocialRef(contact, message)
+          .catch(() => undefined)
+
         const shouldProcessMessage =
           message.toLowerCase() === '/reset' ||
           (company.is_bot_activated &&
@@ -136,7 +157,22 @@ export class WebhookService {
     }
   }
 
-  async transcribeMessage(buffer: Buffer) {
+  private normalizeAudioMediaType(mimeType?: string | null): string {
+    const allowed = [
+      'audio/ogg',
+      'audio/mpeg',
+      'audio/mp4',
+      'audio/m4a',
+      'audio/amr',
+      'audio/wav',
+      'audio/aac',
+      'audio/webm',
+    ]
+    const normalized = (mimeType || '').split(';')[0].trim().toLowerCase()
+    return allowed.includes(normalized) ? normalized : 'audio/ogg'
+  }
+
+  async transcribeMessage(buffer: Buffer, mimeType?: string) {
     try {
       const google = createGoogleGenerativeAI({
         apiKey: process.env.GEMINI_API_KEY,
@@ -155,7 +191,7 @@ export class WebhookService {
               {
                 type: 'file',
                 data: buffer,
-                mediaType: 'audio/ogg',
+                mediaType: this.normalizeAudioMediaType(mimeType),
               },
             ],
           },
@@ -222,10 +258,16 @@ export class WebhookService {
     this.logger.log('baileyDto', baileyDto)
 
     // Determine message type
+    const isImageMedia =
+      !!baileyDto.hasMedia &&
+      !baileyDto.isAudio &&
+      !!baileyDto.mediaUrl &&
+      isImageMediaRef(baileyDto.mediaUrl, baileyDto.mediaType ?? baileyDto.mimeType)
+
     if (baileyDto.isAudio) {
       baileyDto['originalMessageType'] = ORIGINAL_MESSAGE_TYPE.AUDIO
-    } else if (baileyDto.hasMedia && baileyDto.mediaUrl) {
-      baileyDto['originalMessageType'] = ORIGINAL_MESSAGE_TYPE.TEXT
+    } else if (isImageMedia) {
+      baileyDto['originalMessageType'] = ORIGINAL_MESSAGE_TYPE.IMAGE
     } else {
       baileyDto['originalMessageType'] = ORIGINAL_MESSAGE_TYPE.TEXT
     }
@@ -233,6 +275,7 @@ export class WebhookService {
     if (baileyDto.isAudio) {
       baileyDto.text = await this.transcribeMessage(
         Buffer.from(baileyDto.mediaBuffer),
+        baileyDto.mediaType ?? baileyDto.mimeType,
       )
     }
 
@@ -279,6 +322,7 @@ export class WebhookService {
       userlid: baileyDto.userlid ? BigInt(baileyDto.userlid) : null,
       isFromLid,
       wbId: baileyDto.id ?? null,
+      mediaUrl: isImageMedia ? baileyDto.mediaUrl : null,
     }
 
     if (!messageInfo.message) {

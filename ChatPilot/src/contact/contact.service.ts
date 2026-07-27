@@ -16,9 +16,45 @@ import {
 } from 'src/utils/constants/types'
 import { WhatsBaileyService } from 'src/utils/services/whats-bailey.service'
 import {
+  decryptMessage,
   decryptMessagesInPlace,
   encryptMessage,
 } from 'src/common/crypto/message-crypto'
+import { encryptContactFields } from 'src/common/crypto/contact-crypto'
+
+const MEDIA_TYPE_BY_EXTENSION: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  heic: 'image/heic',
+  pdf: 'application/pdf',
+}
+
+function inferMediaType(url: string): string {
+  const clean = url.split('?')[0].split('#')[0]
+  const ext = clean.split('.').pop()?.toLowerCase() ?? ''
+  return MEDIA_TYPE_BY_EXTENSION[ext] ?? 'image/jpeg'
+}
+
+const QUALIFICATION_FIELDS = [
+  'budget_min',
+  'budget_max',
+  'budget_currency',
+  'budget_raw',
+  'property_type',
+  'preferred_location',
+  'bedrooms',
+  'title_preference',
+  'purchase_timeline',
+  'payment_plan',
+  'qualification_notes',
+  'qual_stage',
+  'lead_score',
+]
+
+const BIGINT_QUALIFICATION_FIELDS = ['budget_min', 'budget_max']
 
 @Injectable()
 export class ContactService {
@@ -198,6 +234,51 @@ export class ContactService {
     return chatHistory
   }
 
+  async getAiChatHistoryMultimodal(
+    contactId: number,
+    onlyProcessed: boolean = false,
+  ): Promise<AiChatMessage[]> {
+    const messages = await this.getAllMessages(contactId, onlyProcessed)
+    const budget = Number(process.env.AI_MAX_IMAGE_PARTS || 4)
+
+    const attachable = new Set<number>()
+    if (budget > 0) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (attachable.size >= budget) break
+        const msg = messages[i]
+        if (msg.author_type === AUTHOR_TYPE.HUMAN && msg.image_url) {
+          attachable.add(msg.id)
+        }
+      }
+    }
+
+    return messages.map(msg => {
+      const role = msg.author_type === AUTHOR_TYPE.HUMAN ? 'user' : 'assistant'
+      const isImage = role === 'user' && !!msg.image_url
+      const attached = isImage && attachable.has(msg.id)
+
+      const content: AiChatMessage['content'] = [
+        {
+          type: 'text',
+          text:
+            isImage && !attached
+              ? `${msg.message}\n[image previously sent: ${msg.image_url}]`
+              : msg.message,
+        },
+      ]
+
+      if (attached) {
+        content.push({
+          type: 'file',
+          data: new URL(msg.image_url as string),
+          mediaType: inferMediaType(msg.image_url as string),
+        })
+      }
+
+      return { role, content }
+    })
+  }
+
   async getAllMessages(contactId: number, onlyProcessed: boolean = false) {
     const messages = await this.prisma.messages.findMany({
       where: {
@@ -216,6 +297,7 @@ export class ContactService {
     text: string,
     originalMessageType: ORIGINAL_MESSAGE_TYPE = ORIGINAL_MESSAGE_TYPE.TEXT,
     wbId: string | null = null,
+    imageUrl: string | null = null,
   ): Promise<messages> {
     const message = await this.prisma.messages.create({
       data: {
@@ -225,6 +307,8 @@ export class ContactService {
         author_type: AUTHOR_TYPE.HUMAN,
         original_message_type: originalMessageType,
         wb_id: wbId,
+        image_url: imageUrl,
+        message_type: imageUrl ? 'image' : 'text',
       },
     })
     return message
@@ -316,7 +400,16 @@ export class ContactService {
     field: keyof Prisma.contactsUpdateInput,
     value: string | number | boolean,
   ): Promise<string> {
-    const allowedFields = ['name']
+    const allowedFields = [
+      'name',
+      'property_type',
+      'preferred_location',
+      'title_preference',
+      'purchase_timeline',
+      'payment_plan',
+      'qual_stage',
+      'source',
+    ]
 
     if (!allowedFields.includes(field as string)) {
       return `Invalid field: ${field}`
@@ -333,6 +426,57 @@ export class ContactService {
     } catch (error) {
       return 'Failed to update contact'
     }
+  }
+
+  async updateQualification(
+    contact: contacts,
+    patch: Record<string, any>,
+  ): Promise<string> {
+    const data: Record<string, any> = {}
+
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined || value === null) continue
+      if (!QUALIFICATION_FIELDS.includes(key)) continue
+      if (BIGINT_QUALIFICATION_FIELDS.includes(key)) {
+        const numeric = Number(value)
+        if (!Number.isFinite(numeric) || numeric < 0) continue
+        data[key] = BigInt(Math.round(numeric))
+        continue
+      }
+      data[key] = value
+    }
+
+    if (!Object.keys(data).length) {
+      return 'No valid qualification fields provided'
+    }
+
+    try {
+      await this.prisma.contacts.update({
+        where: { id: contact.id },
+        data: encryptContactFields(data),
+      })
+      return 'success'
+    } catch (error) {
+      this.logger.error('Failed to update qualification', error?.message)
+      return 'Failed to update contact'
+    }
+  }
+
+  async appendQualificationNotes(
+    contact: contacts,
+    notes: string,
+  ): Promise<string> {
+    const current = await this.prisma.contacts.findUnique({
+      where: { id: contact.id },
+      select: { qualification_notes: true },
+    })
+
+    const existing = current?.qualification_notes
+      ? decryptMessage(current.qualification_notes)
+      : ''
+    const merged = existing ? `${existing}\n${notes}` : notes
+
+    return this.updateQualification(contact, { qualification_notes: merged })
   }
 
   async mockTypingState(self: Contact): Promise<void> {
@@ -388,6 +532,7 @@ export class ContactService {
     const updatedContact = await this.updateContact(contactId, {
       last_message_received: new Date(),
       is_follow_up_sent: false,
+      follow_up_stage: 0,
       contact_stop_date: null,
     })
     return updatedContact

@@ -73,13 +73,16 @@ export class CalComService {
     }
 
     const payload = {
-      start: this.datesHelper.addHours(date, 3),
+      start: date,
       eventTypeId: company.cal_event_type_id,
       attendee: {
         name,
         email,
-        timeZone: 'America/Sao_Paulo',
-        language: 'pt',
+        timeZone:
+          (company as any).timezone ||
+          process.env.DEFAULT_TIMEZONE ||
+          'Africa/Lagos',
+        language: (company as any).locale || process.env.DEFAULT_LOCALE || 'en',
       },
       bookingFieldsResponses: {
         phone: `+${phone}`,

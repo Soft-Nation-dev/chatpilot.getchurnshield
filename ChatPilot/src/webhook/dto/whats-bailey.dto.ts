@@ -116,6 +116,14 @@ export class WhatsBaileyDto {
   mediaType?: string
 
   @ApiProperty({
+    type: 'string',
+    description: 'MIME type of the media (alias of mediaType)',
+    required: false,
+    example: 'audio/ogg; codecs=opus',
+  })
+  mimeType?: string
+
+  @ApiProperty({
     type: 'number',
     description: 'Size of the media in bytes',
     required: false,

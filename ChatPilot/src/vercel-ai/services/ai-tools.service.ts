@@ -482,6 +482,254 @@ export class AiToolsService {
           }
         },
       }),
+
+      // LEAD QUALIFICATION VAULT
+      save_budget: tool({
+        description:
+          "Saves the buyer's budget. Nigerian buyers use shorthand: '25m' or '25 million' means 25000000, '1.5b' means 1500000000, '450k' means 450000. '₦45m' means 45000000. Always convert to a plain number before calling. If the buyer gives a range, pass both min and max; if they give a single figure, pass it as max.",
+        inputSchema: z.object({
+          min: z
+            .number()
+            .optional()
+            .describe('Lower bound of the budget as a plain number.'),
+          max: z
+            .number()
+            .optional()
+            .describe('Upper bound of the budget as a plain number.'),
+          currency: z
+            .string()
+            .optional()
+            .describe("Currency code, defaults to 'NGN'."),
+          raw: z
+            .string()
+            .optional()
+            .describe('The exact wording the buyer used, e.g. "around 25m".'),
+        }),
+        execute: async ({ min, max, currency, raw }) => {
+          try {
+            this.logger.log('tool call started', {
+              context: 'save_budget',
+              parameters: { min, max, currency, contactId: contact.id },
+            })
+            const result = await this.contactService.updateQualification(
+              contact,
+              {
+                budget_min: min,
+                budget_max: max,
+                budget_currency: currency || 'NGN',
+                budget_raw: raw,
+              },
+            )
+            this.logger.log('tool call finished', {
+              context: 'save_budget',
+              result,
+            })
+            return result
+          } catch (error) {
+            this.logger.error('tool call failed', {
+              context: 'save_budget',
+              error: error.message,
+            })
+            return 'failed'
+          }
+        },
+      }),
+
+      save_property_preference: tool({
+        description:
+          'Saves what kind of property the buyer wants, where they want it, and which title document they require.',
+        inputSchema: z.object({
+          property_type: z
+            .enum([
+              'land',
+              'plot',
+              'bungalow',
+              'duplex',
+              'flat',
+              'terrace',
+              'shortlet',
+              'commercial',
+              'warehouse',
+            ])
+            .optional()
+            .describe('The type of property the buyer is looking for.'),
+          location: z
+            .string()
+            .optional()
+            .describe(
+              'The area or state the buyer wants, e.g. "Ibeju-Lekki" or "Lekki Phase 1".',
+            ),
+          bedrooms: z
+            .number()
+            .optional()
+            .describe('Number of bedrooms required.'),
+          title_preference: z
+            .enum([
+              'C of O',
+              "Governor's Consent",
+              'Deed of Assignment',
+              'Excision',
+              'Gazette',
+              'Registered Survey',
+            ])
+            .optional()
+            .describe('The title document the buyer requires.'),
+        }),
+        execute: async ({
+          property_type,
+          location,
+          bedrooms,
+          title_preference,
+        }) => {
+          try {
+            this.logger.log('tool call started', {
+              context: 'save_property_preference',
+              parameters: { property_type, location, contactId: contact.id },
+            })
+            const result = await this.contactService.updateQualification(
+              contact,
+              {
+                property_type,
+                preferred_location: location,
+                bedrooms,
+                title_preference,
+              },
+            )
+            this.logger.log('tool call finished', {
+              context: 'save_property_preference',
+              result,
+            })
+            return result
+          } catch (error) {
+            this.logger.error('tool call failed', {
+              context: 'save_property_preference',
+              error: error.message,
+            })
+            return 'failed'
+          }
+        },
+      }),
+
+      save_timeline: tool({
+        description:
+          'Saves how soon the buyer intends to purchase and how they intend to pay.',
+        inputSchema: z.object({
+          timeline: z
+            .enum([
+              'immediate',
+              '1-3_months',
+              '3-6_months',
+              '6_plus_months',
+              'just_browsing',
+            ])
+            .describe('How soon the buyer wants to purchase.'),
+          payment_plan: z
+            .enum(['outright', 'installment', 'mortgage'])
+            .optional()
+            .describe('How the buyer intends to pay.'),
+        }),
+        execute: async ({ timeline, payment_plan }) => {
+          try {
+            this.logger.log('tool call started', {
+              context: 'save_timeline',
+              parameters: { timeline, payment_plan, contactId: contact.id },
+            })
+            const result = await this.contactService.updateQualification(
+              contact,
+              {
+                purchase_timeline: timeline,
+                payment_plan,
+              },
+            )
+            this.logger.log('tool call finished', {
+              context: 'save_timeline',
+              result,
+            })
+            return result
+          } catch (error) {
+            this.logger.error('tool call failed', {
+              context: 'save_timeline',
+              error: error.message,
+            })
+            return 'failed'
+          }
+        },
+      }),
+
+      save_qualification_notes: tool({
+        description:
+          'Appends a short private note about this buyer for the human sales team. Use it for anything important that does not fit the other fields, such as objections raised or a specific estate they asked about.',
+        inputSchema: z.object({
+          notes: z
+            .string()
+            .describe('The note to append. Keep it to one or two sentences.'),
+        }),
+        execute: async ({ notes }) => {
+          try {
+            this.logger.log('tool call started', {
+              context: 'save_qualification_notes',
+              parameters: { contactId: contact.id },
+            })
+            const result = await this.contactService.appendQualificationNotes(
+              contact,
+              notes,
+            )
+            this.logger.log('tool call finished', {
+              context: 'save_qualification_notes',
+              result,
+            })
+            return result
+          } catch (error) {
+            this.logger.error('tool call failed', {
+              context: 'save_qualification_notes',
+              error: error.message,
+            })
+            return 'failed'
+          }
+        },
+      }),
+
+      set_lead_stage: tool({
+        description:
+          "Updates where this buyer sits in the sales pipeline. Use 'engaged' once they answer questions, 'qualified' once budget and location are known, 'booked' once an inspection is scheduled, and 'lost' if they say they are no longer interested.",
+        inputSchema: z.object({
+          stage: z
+            .enum(['new', 'engaged', 'qualified', 'booked', 'lost'])
+            .describe('The pipeline stage for this buyer.'),
+          score: z
+            .number()
+            .optional()
+            .describe('Optional lead score from 0 to 100.'),
+        }),
+        execute: async ({ stage, score }) => {
+          try {
+            this.logger.log('tool call started', {
+              context: 'set_lead_stage',
+              parameters: { stage, score, contactId: contact.id },
+            })
+            const result = await this.contactService.updateQualification(
+              contact,
+              {
+                qual_stage: stage,
+                ...(score === undefined
+                  ? {}
+                  : { lead_score: Math.max(0, Math.min(100, Math.round(score))) }),
+              },
+            )
+            this.logger.log('tool call finished', {
+              context: 'set_lead_stage',
+              result,
+            })
+            return result
+          } catch (error) {
+            this.logger.error('tool call failed', {
+              context: 'set_lead_stage',
+              error: error.message,
+            })
+            return 'failed'
+          }
+        },
+      }),
     }
 
     // Filter out excluded tools

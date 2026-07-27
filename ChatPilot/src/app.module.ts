@@ -20,6 +20,8 @@ import { bullBoardAuthMiddleware } from './utils/Middlewares/bull-board-auth.mid
 import { AuthModule } from './auth/auth.module'
 import { LeadsModule } from './leads/leads.module'
 import { AdminModule } from './admin/admin.module'
+import { TeamModule } from './team/team.module'
+import { SocialModule } from './social/social.module'
 
 @Module({
   imports: [
@@ -59,6 +61,8 @@ import { AdminModule } from './admin/admin.module'
     AuthModule,
     LeadsModule,
     AdminModule,
+    TeamModule,
+    SocialModule,
   ],
   controllers: [AppController],
   providers: [

@@ -19,10 +19,12 @@ import {
 } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { CompanyService } from './company.service'
+import { CompanyAccessService } from './company-access.service'
 import { CreateCompanyDto } from './dto/create-company.dto'
 import { ApiBody, ApiHeader, ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger'
 import { Response } from 'express'
 import { ContactService } from 'src/contact/contact.service'
+import { ContactRedactionService } from 'src/contact/contact-redaction.service'
 import { AUTHOR_TYPE, Contact } from 'src/utils/constants/types'
 import { SendMessageDto } from './dto/send-message.dto'
 import { WhatsAppFormatter } from 'src/utils/services/whatsapp-formatter.helper'
@@ -37,11 +39,12 @@ export class CompanyController {
     private readonly contactService: ContactService,
     private readonly WaFormattingService: WhatsAppFormatter,
     private readonly ConfigService: ConfigsService,
+    private readonly companyAccess: CompanyAccessService,
+    private readonly contactRedaction: ContactRedactionService,
   ) {}
 
   private async verifyOwnership(userId: number, companyId: number) {
-    const owns = await this.companyService.userOwnsCompany(userId, companyId)
-    if (!owns) throw new ForbiddenException('You do not own this company')
+    await this.companyAccess.assertAccess({ userId }, companyId)
   }
 
   @ApiOperation({ summary: 'Create Company' })
@@ -331,12 +334,23 @@ export class CompanyController {
     @Query('active_within') active_within?: string,
   ) {
     await this.verifyOwnership(req.user.userId, id)
-    return this.companyService.getContacts(id, +page, +limit, search, {
-      needs_review,
-      bot_activated,
-      has_appointment,
-      active_within,
-    })
+    const result = await this.companyService.getContacts(
+      id,
+      +page,
+      +limit,
+      search,
+      {
+        needs_review,
+        bot_activated,
+        has_appointment,
+        active_within,
+      },
+    )
+    result.data = this.contactRedaction.redactManyForUser(
+      result.data as any,
+      req.user,
+    ) as any
+    return result
   }
 
   @ApiOperation({ summary: 'Toggle bot activation for a contact' })

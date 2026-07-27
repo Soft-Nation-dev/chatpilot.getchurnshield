@@ -14,6 +14,11 @@ export type AiSdkToolsNames =
   | 'get_available_slots'
   | 'book_appointment'
   | 'cancel_appointment'
+  | 'save_budget'
+  | 'save_property_preference'
+  | 'save_timeline'
+  | 'save_qualification_notes'
+  | 'set_lead_stage'
 
 export type AiSdkToolConfig = ToolSet
 export enum AUTHOR_TYPE {
@@ -31,6 +36,8 @@ export type AiChatMessage = {
   role: string
   content: {
     type: string
-    text: string
+    text?: string
+    data?: any
+    mediaType?: string
   }[]
 }

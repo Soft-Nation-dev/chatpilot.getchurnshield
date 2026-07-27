@@ -14,6 +14,7 @@ import { LoginDto } from './dto/login.dto'
 import { ForgotPasswordDto } from './dto/forgot-password.dto'
 import { VerifyOtpDto } from './dto/verify-otp.dto'
 import { ResetPasswordDto } from './dto/reset-password.dto'
+import { AcceptInviteDto } from './dto/accept-invite.dto'
 import { CompanyService } from 'src/company/company.service'
 import { WhatsBaileyService } from 'src/utils/services/whats-bailey.service'
 
@@ -57,19 +58,33 @@ export class AuthService {
           company_name: dto.company_name,
           company_id: company.id,
         },
-        select: { id: true, phone: true },
+        select: {
+          id: true,
+          phone: true,
+          company_id: true,
+          role: true,
+          token_version: true,
+        },
       })
 
       return { user, company }
     })
 
-    return this.generateTokens(result.user.id, result.user.phone)
+    return this.generateTokens(result.user)
   }
 
   async login(dto: LoginDto) {
     const user = await this.prisma.users.findUnique({
       where: { phone: dto.phone },
-      select: { id: true, phone: true, password: true },
+      select: {
+        id: true,
+        phone: true,
+        password: true,
+        company_id: true,
+        role: true,
+        status: true,
+        token_version: true,
+      },
     })
 
     if (!user) {
@@ -81,7 +96,17 @@ export class AuthService {
       throw new UnauthorizedException('Phone number or password is incorrect')
     }
 
-    return this.generateTokens(user.id, user.phone)
+    if (user.status !== 'active') {
+      throw new UnauthorizedException('This account is no longer active')
+    }
+
+    await this.prisma.users.update({
+      where: { id: user.id },
+      data: { last_login_at: new Date() },
+      select: { id: true },
+    })
+
+    return this.generateTokens(user)
   }
 
   async refresh(refreshToken: string) {
@@ -92,14 +117,25 @@ export class AuthService {
 
       const user = await this.prisma.users.findUnique({
         where: { id: payload.sub },
-        select: { id: true, phone: true },
+        select: {
+          id: true,
+          phone: true,
+          company_id: true,
+          role: true,
+          status: true,
+          token_version: true,
+        },
       })
 
-      if (!user) {
+      if (!user || user.status !== 'active') {
         throw new UnauthorizedException('Invalid refresh token')
       }
 
-      return this.generateTokens(user.id, user.phone)
+      if (payload.tv !== undefined && payload.tv !== user.token_version) {
+        throw new UnauthorizedException('Invalid refresh token')
+      }
+
+      return this.generateTokens(user)
     } catch {
       throw new UnauthorizedException('Invalid refresh token')
     }
@@ -256,8 +292,64 @@ export class AuthService {
     return { success: true, message: 'Password reset successfully' }
   }
 
-  private generateTokens(userId: number, phone: string) {
-    const payload = { sub: userId, phone }
+  async acceptInvite(dto: AcceptInviteDto) {
+    const user = await this.prisma.users.findFirst({
+      where: { invite_token: dto.token },
+      select: {
+        id: true,
+        phone: true,
+        company_id: true,
+        role: true,
+        status: true,
+        token_version: true,
+        invite_expires_at: true,
+      },
+    })
+
+    if (!user || user.status !== 'invited') {
+      throw new UnauthorizedException('Invalid or already used invitation')
+    }
+
+    if (!user.invite_expires_at || user.invite_expires_at < new Date()) {
+      throw new UnauthorizedException('This invitation has expired')
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10)
+
+    const updated = await this.prisma.users.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        status: 'active',
+        invite_token: null,
+        invite_expires_at: null,
+      },
+      select: {
+        id: true,
+        phone: true,
+        company_id: true,
+        role: true,
+        token_version: true,
+      },
+    })
+
+    return this.generateTokens(updated)
+  }
+
+  private generateTokens(user: {
+    id: number
+    phone: string
+    company_id: number
+    role: string
+    token_version: number
+  }) {
+    const payload = {
+      sub: user.id,
+      phone: user.phone,
+      cid: user.company_id,
+      role: user.role,
+      tv: user.token_version,
+    }
 
     const access_token = this.jwtService.sign(payload, {
       secret: this.configsService.jwtSecret,
