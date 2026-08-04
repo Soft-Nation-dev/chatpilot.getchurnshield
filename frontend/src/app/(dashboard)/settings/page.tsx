@@ -49,7 +49,7 @@ export default function SettingsPage() {
   const [deleteError, setDeleteError] = useState('')
   const [otpSent, setOtpSent] = useState(false)
   const [sendingOtp, setSendingOtp] = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval>>()
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [assets, setAssets] = useState<CompanyAsset[]>([])
   const [uploading, setUploading] = useState(false)

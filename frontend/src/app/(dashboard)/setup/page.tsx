@@ -34,7 +34,7 @@ export default function SetupPage() {
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
   const [loadingPairing, setLoadingPairing] = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval>>()
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const companyId = user?.company_id
 
   useEffect(() => {
