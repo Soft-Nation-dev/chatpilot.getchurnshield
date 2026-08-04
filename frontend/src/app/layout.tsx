@@ -19,6 +19,9 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getchurnshield.chat
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+  other: {
+    "facebook-domain-verification": "y4qyb9wiay2fpwrw97ans0uonxl6ip",
+  },
   title: {
     default: "GetChurnShield — Your business on WhatsApp, automated",
     template: "%s · GetChurnShield",
