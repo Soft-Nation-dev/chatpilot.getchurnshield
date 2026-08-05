@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { createContext, useContext, useState } from 'react'
+import { useAuth } from '@/context/auth-context'
 
 interface SidebarContextType {
   open: boolean
@@ -56,6 +57,21 @@ const navItems = [
     ),
   },
   {
+    href: '/team',
+    label: 'Team',
+    roles: ['owner', 'manager'],
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>
+    ),
+  },
+  {
+    href: '/settings/social',
+    label: 'Social Channels',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4"/><path d="m15.4 6.5-6.8 4"/></svg>
+    ),
+  },
+  {
     href: '/setup',
     label: 'Setup',
     icon: (
@@ -74,6 +90,8 @@ const navItems = [
 function SidebarContent() {
   const pathname = usePathname()
   const { setOpen } = useSidebar()
+  const { user } = useAuth()
+  const visibleItems = navItems.filter(item => !item.roles || (user?.role && item.roles.includes(user.role)))
 
   return (
     <>
@@ -85,8 +103,10 @@ function SidebarContent() {
       </div>
 
       <nav className="flex-1 space-y-1 p-4">
-        {navItems.map(item => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+        {visibleItems.map(item => {
+          const isActive = item.href === '/settings'
+            ? pathname === item.href
+            : pathname === item.href || pathname.startsWith(item.href + '/')
           return (
             <Link key={item.href} href={item.href} onClick={() => setOpen(false)}>
               <motion.div

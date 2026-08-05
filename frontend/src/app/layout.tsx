@@ -15,7 +15,7 @@ const geistMono = localFont({
   weight: "100 900",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getchurnshield.chat-pilot.dev";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://chatpilot.trygetchurnshield.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -23,17 +23,17 @@ export const metadata: Metadata = {
     "facebook-domain-verification": "y4qyb9wiay2fpwrw97ans0uonxl6ip",
   },
   title: {
-    default: "GetChurnShield — Your business on WhatsApp, automated",
+    default: "Outbound Engine — Property leads, qualified automatically",
     template: "%s · GetChurnShield",
   },
   description:
-    "AI-powered WhatsApp assistant for service businesses. Replies 24/7, books appointments, speaks Urdu + English, keeps your WhatsApp app working.",
+    "AI-powered outbound engine for property businesses. Sources prospects, qualifies buyers across WhatsApp and Meta, and keeps your team in control.",
   applicationName: "GetChurnShield",
   keywords: [
     "WhatsApp AI",
     "WhatsApp automation",
     "AI chatbot",
-    "appointment booking",
+    "property lead qualification",
     "real estate leads",
     "lead generation",
     "customer support",
@@ -55,23 +55,23 @@ export const metadata: Metadata = {
     type: "website",
     url: siteUrl,
     siteName: "GetChurnShield",
-    title: "GetChurnShield — Your business on WhatsApp, automated",
+    title: "Outbound Engine — Property leads, qualified automatically",
     description:
-      "AI-powered WhatsApp assistant. Replies 24/7, books appointments, speaks Urdu + English.",
+      "Source property prospects and qualify buyer conversations across WhatsApp, Facebook, and Instagram.",
     images: [
       {
         url: "/og-image.jpg",
         width: 1200,
         height: 630,
-        alt: "GetChurnShield — Your business on WhatsApp, automated",
+        alt: "Outbound Engine — Property leads, qualified automatically",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "GetChurnShield — Your business on WhatsApp, automated",
+    title: "Outbound Engine — Property leads, qualified automatically",
     description:
-      "AI-powered WhatsApp assistant. Replies 24/7, books appointments, speaks Urdu + English.",
+      "Source property prospects and qualify buyer conversations across WhatsApp, Facebook, and Instagram.",
     images: ["/og-image.jpg"],
   },
   robots: {

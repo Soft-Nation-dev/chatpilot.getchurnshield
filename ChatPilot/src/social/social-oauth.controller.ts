@@ -51,7 +51,12 @@ export class SocialOauthController {
     @Query('state') state: string,
     @Res() res: Response,
   ) {
-    const base = process.env.FRONTEND_URL || 'http://localhost:3001'
+    const base = (
+      process.env.FRONTEND_URL || 'https://chatpilot.trygetchurnshield.com'
+    )
+      .split(',')[0]
+      .trim()
+      .replace(/\/$/, '')
     try {
       await this.socialOauthService.completeCallback(code, state)
       res.redirect(`${base}/settings/social?connected=1`)

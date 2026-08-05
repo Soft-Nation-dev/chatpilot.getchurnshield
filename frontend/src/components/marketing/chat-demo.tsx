@@ -27,10 +27,10 @@ export function ChatDemo({ className }: { className?: string }) {
       <div className="rounded-3xl bg-[#0b141a] overflow-hidden">
         <div className="flex items-center gap-3 bg-[#202c33] px-4 py-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 text-white font-semibold">
-            BC
+            OE
           </div>
           <div className="flex-1">
-            <div className="text-sm font-medium text-white">Bright Clinic</div>
+            <div className="text-sm font-medium text-white">Outbound Property</div>
             <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
               online

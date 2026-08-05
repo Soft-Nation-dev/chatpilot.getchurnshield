@@ -32,7 +32,7 @@ export function Header() {
           </div>
           <div className="hidden sm:block">
             <p className="text-sm font-medium text-foreground leading-none">{user?.company_name}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{user?.phone}</p>
+            <p className="text-xs capitalize text-muted-foreground mt-0.5">{user?.role} · {user?.phone}</p>
           </div>
         </div>
         <div className="h-6 w-px bg-slate-200" />

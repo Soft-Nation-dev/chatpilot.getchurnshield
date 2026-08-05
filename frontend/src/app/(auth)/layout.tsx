@@ -4,10 +4,10 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 
 const features = [
-  'AI replies in under a second',
-  'Books appointments via cal.com',
-  'Speaks Urdu + English fluently',
-  'Per-contact bot override',
+  'Sources qualified property leads',
+  'Replies on WhatsApp around the clock',
+  'Connects Facebook and Instagram',
+  'Team roles and human takeover',
 ]
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -41,7 +41,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               answering for itself.
             </h1>
             <p className="mt-6 max-w-md text-lg text-emerald-50/90">
-              Pair your number. Describe your business. Watch the AI handle every customer
+              Connect your channels. Describe your inventory. Watch the AI qualify every property
               message — day or night.
             </p>
 
@@ -67,14 +67,14 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
           <figure className="max-w-md rounded-2xl border border-white/15 bg-white/10 p-6 backdrop-blur-md">
             <blockquote className="text-sm leading-relaxed text-emerald-50">
-              &ldquo;We went from missing half our after-hours leads to answering every single one.
-              Bookings are up 38% this month.&rdquo;
+              &ldquo;We stopped losing late-night property enquiries and gave our agents qualified
+              conversations to follow up every morning.&rdquo;
             </blockquote>
             <figcaption className="mt-4 flex items-center gap-3">
               <div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-300 to-teal-400" />
               <div>
-                <div className="text-sm font-semibold text-white">Dr. Hina Raza</div>
-                <div className="text-xs text-emerald-100/70">Bright Smile Dental, Lahore</div>
+                <div className="text-sm font-semibold text-white">Ada Okafor</div>
+                <div className="text-xs text-emerald-100/70">Property advisory, Lagos</div>
               </div>
             </figcaption>
           </figure>

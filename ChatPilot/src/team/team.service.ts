@@ -222,10 +222,17 @@ export class TeamService {
     try {
       const company = await this.companyService.findById(companyId)
       if (!company) return
+      const frontendUrl = (
+        process.env.FRONTEND_URL || 'https://chatpilot.trygetchurnshield.com'
+      )
+        .split(',')[0]
+        .trim()
+        .replace(/\/$/, '')
+      const inviteUrl = `${frontendUrl}/accept-invite?token=${encodeURIComponent(token)}`
       await this.whatsBaileyService.sendMessage(
         company,
         Number(phone),
-        `You have been invited to join ${company.name}.\n\nYour invitation code is:\n*${token}*\n\nIt expires in ${INVITE_TOKEN_TTL_HOURS} hours.`,
+        `You have been invited to join ${company.name}.\n\nAccept your invitation:\n${inviteUrl}\n\nInvitation code:\n*${token}*\n\nIt expires in ${INVITE_TOKEN_TTL_HOURS} hours.`,
       )
     } catch (error) {
       this.logger.error('Failed to deliver invite over WhatsApp', error?.message)

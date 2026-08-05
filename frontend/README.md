@@ -10,7 +10,7 @@ The project uses Next.js 16, React 19, and the current OpenNext adapter.
 Create `.env.local`:
 
 ```dotenv
-NEXT_PUBLIC_API_URL=https://your-api.example.com/api/v1
+NEXT_PUBLIC_API_URL=https://api.chat-pilot.dev/api/v1
 NEXT_PUBLIC_SITE_URL=http://localhost:3002
 ```
 
@@ -57,6 +57,17 @@ The repository workflow deploys changes under `frontend/` when they reach
 - Variable `NEXT_PUBLIC_API_URL`: public API base URL, including `/api/v1` if
   that is how the backend is mounted.
 - Variable `NEXT_PUBLIC_SITE_URL`: final frontend URL.
+
+Production values for the current deployment are:
+
+```text
+NEXT_PUBLIC_API_URL=https://api.chat-pilot.dev/api/v1
+NEXT_PUBLIC_SITE_URL=https://chatpilot.trygetchurnshield.com
+```
+
+The API deployment must set `FRONTEND_URL` to the same frontend origin. Meta
+OAuth additionally requires `META_APP_ID`, `META_APP_SECRET`, and
+`META_OAUTH_REDIRECT_URI=https://api.chat-pilot.dev/api/v1/social/oauth/facebook/callback`.
 
 The backend must allow browser requests from the Worker or custom-domain
 origin through its CORS configuration.

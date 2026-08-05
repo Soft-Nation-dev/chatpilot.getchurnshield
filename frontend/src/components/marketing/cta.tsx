@@ -13,8 +13,8 @@ export function FinalCTA() {
             Stop losing leads at 2am.
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-pretty text-lg text-emerald-50/90">
-            Pair your WhatsApp in under 3 minutes. Your AI replies to every customer,
-            books appointments, and hands off to you only when it matters.
+            Connect WhatsApp in minutes. Your AI sources and qualifies property leads,
+            then hands the right conversations to your team.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link

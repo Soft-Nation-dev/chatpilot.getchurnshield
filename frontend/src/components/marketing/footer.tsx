@@ -35,10 +35,10 @@ export function MarketingFooter() {
           <div className="md:col-span-2">
             <Logo />
             <p className="mt-4 max-w-xs text-sm text-slate-600 leading-relaxed">
-              Your business, automated. WhatsApp replies, appointment bookings, and customer
+              Property lead sourcing, qualification, WhatsApp replies, and customer
               support — running 24/7 on your own number.
             </p>
-            <p className="mt-6 text-xs text-slate-500">Built in Pakistan.</p>
+            <p className="mt-6 text-xs text-slate-500">Built for property teams in Nigeria.</p>
           </div>
           {columns.map((col) => (
             <div key={col.title}>

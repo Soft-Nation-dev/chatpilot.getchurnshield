@@ -12,11 +12,11 @@ import { VideoShowcase } from "@/components/marketing/video-showcase"
 export const metadata: Metadata = {
   title: "Outbound Engine — Your business on WhatsApp, automated",
   description:
-    "AI-powered WhatsApp assistant for service businesses. Answers customers 24/7, books appointments on cal.com, handles Urdu + English, and hands off to you when it matters.",
+    "AI-powered outbound engine for property businesses. Sources prospects and qualifies buyers across WhatsApp, Facebook, and Instagram.",
   openGraph: {
     title: "Outbound Engine — Your business on WhatsApp, automated",
     description:
-      "AI-powered WhatsApp assistant for service businesses. Replies 24/7, books appointments, speaks Urdu + English.",
+      "Source property prospects and qualify buyer conversations across WhatsApp, Facebook, and Instagram.",
     type: "website",
   },
 }
@@ -28,14 +28,14 @@ const benefits = [
       "Customers get answers instantly, even at 3am. No more lost leads to the next-fastest business.",
   },
   {
-    title: "Books appointments for you",
+    title: "Finds prospects for you",
     description:
-      "Connected to cal.com. Shows real availability, confirms the slot, adds it to your calendar.",
+      "Pulls from your configured lead sources, respects daily quotas, and keeps every prospect organized.",
   },
   {
-    title: "Speaks Urdu + English",
+    title: "Works across your channels",
     description:
-      "Handles mixed-language messages natively. Your customer writes how they talk.",
+      "Qualifies enquiries from WhatsApp, Facebook, and Instagram in one operational workflow.",
   },
   {
     title: "You stay in control",
@@ -233,8 +233,8 @@ export default function LandingPage() {
       <Section>
         <SectionHeading
           eyebrow="Why Outbound Engine"
-          title={<>Every message answered. Every appointment booked.</>}
-          subtitle="Built for clinics, salons, and service businesses drowning in WhatsApp messages."
+          title={<>Every prospect captured. Every serious buyer qualified.</>}
+          subtitle="Built for property teams managing lead sourcing and conversations across multiple channels."
         />
         <div className="grid gap-6 md:grid-cols-2">
           {benefits.map((b, i) => (

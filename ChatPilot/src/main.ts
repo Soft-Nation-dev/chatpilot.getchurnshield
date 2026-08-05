@@ -14,6 +14,7 @@ import { json, urlencoded } from 'express'
   return int ?? this.toString()
 }
 async function bootstrap() {
+  const isProduction = process.env.NODE_ENV?.toLowerCase() === 'production'
   const app = await NestFactory.create(AppModule, {
     logger: new LoggerService({
       prefix: 'api',
@@ -33,7 +34,7 @@ async function bootstrap() {
   app.use(urlencoded({ limit: '50mb', extended: true }))
 
   app.setGlobalPrefix('api/v1')
-  if (process.env.NODE_ENV !== 'Production') {
+  if (!isProduction) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('RAMP-API')
       .addCookieAuth()
@@ -44,8 +45,19 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, swaggerConfig)
     SwaggerModule.setup('api', app, document)
   }
+  const frontendOrigins = (
+    process.env.FRONTEND_URL || 'https://chatpilot.trygetchurnshield.com'
+  )
+    .split(',')
+    .map(origin => origin.trim().replace(/\/$/, ''))
+    .filter(Boolean)
+
+  if (!isProduction) {
+    frontendOrigins.push('http://localhost:3002')
+  }
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    origin: [...new Set(frontendOrigins)],
     credentials: true,
   })
   app.useGlobalFilters(new AllExceptionsFilter())

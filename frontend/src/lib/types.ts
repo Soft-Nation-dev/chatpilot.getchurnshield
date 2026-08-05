@@ -1,8 +1,12 @@
 export interface User {
   id: number
   phone: string
+  full_name: string | null
   company_name: string
   company_id: number
+  role: 'owner' | 'manager' | 'agent'
+  status: 'active' | 'invited' | 'revoked'
+  can_view_contact_phone: boolean
   created_at: string
   updated_at: string
   company: Company

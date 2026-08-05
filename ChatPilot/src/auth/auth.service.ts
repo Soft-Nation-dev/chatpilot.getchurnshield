@@ -147,8 +147,12 @@ export class AuthService {
       select: {
         id: true,
         phone: true,
+        full_name: true,
         company_id: true,
         company_name: true,
+        role: true,
+        status: true,
+        can_view_contact_phone: true,
         created_at: true,
         updated_at: true,
         company: true,
