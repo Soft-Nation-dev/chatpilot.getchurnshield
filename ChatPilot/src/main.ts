@@ -45,20 +45,47 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, swaggerConfig)
     SwaggerModule.setup('api', app, document)
   }
-  const frontendOrigins = (
-    process.env.FRONTEND_URL || 'https://chatpilot.trygetchurnshield.com'
-  )
-    .split(',')
-    .map(origin => origin.trim().replace(/\/$/, ''))
+  const KNOWN_FRONTEND_ORIGINS = [
+    'https://chatpilot.trygetchurnshield.com',
+    'https://trygetchurnshield.com',
+    'https://www.trygetchurnshield.com',
+    'https://chat-pilot.dev',
+    'https://www.chat-pilot.dev',
+  ]
+
+  const normalizeOrigin = (origin: string) =>
+    origin.trim().replace(/\/$/, '').toLowerCase()
+
+  const frontendOrigins = [
+    ...KNOWN_FRONTEND_ORIGINS,
+    ...(process.env.FRONTEND_URL || '').split(','),
+    ...(process.env.EXTRA_CORS_ORIGINS || '').split(','),
+  ]
+    .map(normalizeOrigin)
     .filter(Boolean)
 
   if (!isProduction) {
+    frontendOrigins.push('http://localhost:3000')
+    frontendOrigins.push('http://localhost:3001')
     frontendOrigins.push('http://localhost:3002')
   }
 
+  const allowedOrigins = new Set(frontendOrigins)
+
   app.enableCors({
-    origin: [...new Set(frontendOrigins)],
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true)
+      callback(null, allowedOrigins.has(normalizeOrigin(origin)))
+    },
     credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-admin-secret',
+      'chatPilot-api-key',
+    ],
+    optionsSuccessStatus: 204,
   })
   app.useGlobalFilters(new AllExceptionsFilter())
   app.useGlobalPipes(new ValidationPipe())

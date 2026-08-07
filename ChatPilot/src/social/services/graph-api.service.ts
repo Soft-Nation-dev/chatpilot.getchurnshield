@@ -122,6 +122,38 @@ export class GraphApiService {
     )
   }
 
+  publishPagePost(
+    pageId: string,
+    message: string,
+    imageUrl: string | null,
+    accessToken: string,
+  ) {
+    return imageUrl
+      ? this.post(`${pageId}/photos`, { url: imageUrl, caption: message }, accessToken)
+      : this.post(`${pageId}/feed`, { message }, accessToken)
+  }
+
+  async publishInstagramPost(
+    igUserId: string,
+    caption: string,
+    imageUrl: string,
+    accessToken: string,
+  ): Promise<GraphResult> {
+    const container = await this.post(
+      `${igUserId}/media`,
+      { image_url: imageUrl, caption },
+      accessToken,
+    )
+
+    if (!container.success || !container.data?.id) return container
+
+    return this.post(
+      `${igUserId}/media_publish`,
+      { creation_id: container.data.id },
+      accessToken,
+    )
+  }
+
   subscribePage(pageId: string, accessToken: string) {
     return this.post(
       `${pageId}/subscribed_apps`,

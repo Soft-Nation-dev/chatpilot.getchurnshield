@@ -161,9 +161,15 @@ export class MetaWebhookService {
       return
     }
 
+    const contentPostId = await this.resolveContentPost(
+      account.company_id,
+      normalized.postId,
+    )
+
     const event = await this.safeCreate({
       company_id: account.company_id,
       social_account_id: account.id,
+      content_post_id: contentPostId,
       platform: normalized.platform,
       event_type: normalized.eventType,
       external_id: normalized.externalId,
@@ -182,6 +188,35 @@ export class MetaWebhookService {
       { eventId: event.id },
       { attempts: 2, backoff: { type: 'exponential', delay: 5000 } },
     )
+  }
+
+  private async resolveContentPost(
+    companyId: number,
+    postId: string | null,
+  ): Promise<number | null> {
+    if (!postId) return null
+
+    try {
+      const post = await this.prisma.content_posts.findFirst({
+        where: {
+          company_id: companyId,
+          OR: [{ fb_post_id: postId }, { ig_post_id: postId }],
+        },
+        select: { id: true },
+      })
+
+      if (!post) return null
+
+      await this.prisma.content_posts.update({
+        where: { id: post.id },
+        data: { comments_count: { increment: 1 } },
+      })
+
+      return post.id
+    } catch (error) {
+      this.logger.error('Failed to resolve content post', error?.message)
+      return null
+    }
   }
 
   private async safeCreate(data: any) {

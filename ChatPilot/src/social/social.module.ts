@@ -39,6 +39,6 @@ import { SocialInboundProcessor } from './processors/social-inbound.processor'
     SocialAttributionService,
     SocialInboundProcessor,
   ],
-  exports: [SocialAttributionService],
+  exports: [SocialAttributionService, GraphApiService, SocialAccountService],
 })
 export class SocialModule {}

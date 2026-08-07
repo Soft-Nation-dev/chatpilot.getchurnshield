@@ -38,6 +38,8 @@ model companies {
   leads                      leads[]
   lead_requests              lead_requests[]
   social_accounts            social_accounts[]
+  properties                 properties[]
+  content_posts              content_posts[]
 }
 
 model users {
@@ -207,6 +209,78 @@ model pool {
   created_at     DateTime @default(now()) @db.Timestamptz(6)
 }
 
+model properties {
+  id             Int             @id @default(autoincrement())
+  company_id     Int
+  title          String          @db.VarChar(200)
+  description    String?
+  property_type  String?         @db.VarChar(50)
+  location       String?         @db.VarChar(120)
+  state          String?         @db.VarChar(60)
+  price          BigInt?
+  price_max      BigInt?
+  currency       String?         @default("NGN") @db.VarChar(8)
+  size_sqm       Int?
+  bedrooms       Int?
+  bathrooms      Int?
+  title_document String?         @db.VarChar(60)
+  payment_plan   String?
+  features       String?
+  image_urls     String?
+  video_url      String?
+  status         String          @default("available") @db.VarChar(20)
+  created_at     DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime?       @updatedAt @db.Timestamptz(6)
+  company        companies       @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  content_posts  content_posts[]
+
+  @@index([company_id, status])
+}
+
+model content_posts {
+  id             Int         @id @default(autoincrement())
+  company_id     Int
+  property_id    Int?
+  kind           String      @db.VarChar(30)
+  topic          String?     @db.VarChar(200)
+  caption        String
+  hashtags       String?
+  image_urls     String?
+  platforms      String?     @default("facebook,instagram") @db.VarChar(60)
+  status         String      @default("draft") @db.VarChar(20)
+  scheduled_at   DateTime?   @db.Timestamptz(6)
+  published_at   DateTime?   @db.Timestamptz(6)
+  fb_post_id     String?     @db.VarChar
+  ig_post_id     String?     @db.VarChar
+  error          String?
+  comments_count Int         @default(0)
+  wa_clicks      Int         @default(0)
+  created_at     DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime?   @updatedAt @db.Timestamptz(6)
+  company        companies   @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  property       properties? @relation(fields: [property_id], references: [id], onDelete: SetNull)
+
+  @@index([company_id, status])
+  @@index([company_id, scheduled_at])
+  @@index([fb_post_id])
+  @@index([ig_post_id])
+}
+
+model learned_guidelines {
+  id          Int       @id @default(autoincrement())
+  company_id  Int
+  scope       String    @db.VarChar(30)
+  guidelines  String
+  sample_size Int       @default(0)
+  won_count   Int       @default(0)
+  lost_count  Int       @default(0)
+  is_active   Boolean   @default(true)
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @updatedAt @db.Timestamptz(6)
+
+  @@index([company_id, scope, is_active])
+}
+
 model audit_logs {
   id         Int      @id @default(autoincrement())
   company_id Int
@@ -265,6 +339,7 @@ model social_events {
   reply_text         String?
   wa_link            String?
   ref_code           String?   @unique @db.VarChar(16)
+  content_post_id    Int?
   error              String?
   created_at         DateTime  @default(now()) @db.Timestamptz(6)
   updated_at         DateTime? @updatedAt @db.Timestamptz(6)

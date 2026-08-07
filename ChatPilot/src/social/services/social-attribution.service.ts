@@ -41,6 +41,13 @@ export class SocialAttributionService {
       data: { action: SOCIAL_ACTION.CONVERTED },
     })
 
+    if (event.content_post_id) {
+      await this.prisma.content_posts.update({
+        where: { id: event.content_post_id },
+        data: { wa_clicks: { increment: 1 } },
+      })
+    }
+
     this.logger.log(
       `Attributed contact ${contact.id} to social event ${event.id} (${refCode})`,
     )

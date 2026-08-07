@@ -82,7 +82,9 @@ export class AiAssistantConfigService {
         (company as any).vertical === 'real_estate'
           ? `\n\n${REAL_ESTATE_KNOWLEDGE}`
           : ''
-      const fullSystemPrompt = `${BUILTIN_TOOL_INSTRUCTIONS}${verticalPrompt}\n\n## Your Role & Instructions\n\n${companyPrompt}${assetsPrompt}`
+      const inventoryPrompt = await this.buildInventoryPrompt(company.id)
+      const learnedPrompt = await this.buildLearnedPrompt(company.id)
+      const fullSystemPrompt = `${BUILTIN_TOOL_INSTRUCTIONS}${verticalPrompt}\n\n## Your Role & Instructions\n\n${companyPrompt}${assetsPrompt}${inventoryPrompt}${learnedPrompt}`
 
       return {
         systemPrompt: fullSystemPrompt,
@@ -98,6 +100,70 @@ export class AiAssistantConfigService {
         error: error.message,
       })
       return null
+    }
+  }
+
+  private async buildInventoryPrompt(companyId: number): Promise<string> {
+    try {
+      const properties = await this.prismaService.properties.findMany({
+        where: { company_id: companyId, status: 'available' },
+        orderBy: { id: 'desc' },
+        take: 30,
+      })
+
+      if (!properties.length) return ''
+
+      const lines = properties.map(p => {
+        const bits: string[] = [p.title]
+        if (p.property_type) bits.push(p.property_type)
+        if (p.location) bits.push(p.location)
+        if (p.state) bits.push(p.state)
+        if (p.size_sqm) bits.push(`${p.size_sqm} sqm`)
+        if (p.bedrooms) bits.push(`${p.bedrooms} bedrooms`)
+        if (p.title_document) bits.push(`title: ${p.title_document}`)
+        if (p.price != null) {
+          const currency = p.currency || 'NGN'
+          bits.push(
+            p.price_max != null && p.price_max !== p.price
+              ? `price: ${currency} ${p.price} - ${p.price_max}`
+              : `price: ${currency} ${p.price}`,
+          )
+        }
+        if (p.payment_plan) bits.push(`payment: ${p.payment_plan}`)
+        if (p.features) bits.push(`features: ${p.features}`)
+        return `- ${bits.join(' | ')}`
+      })
+
+      return `\n\n## Available Inventory\n\nThese are the ONLY properties you may quote or describe. If a buyer asks about something not listed here, say you will confirm with the office and call notify_company. Never invent a property, price or title status.\n\n${lines.join('\n')}`
+    } catch (error) {
+      this.logger.error('Failed to build inventory prompt', {
+        companyId,
+        error: error.message,
+      })
+      return ''
+    }
+  }
+
+  private async buildLearnedPrompt(companyId: number): Promise<string> {
+    try {
+      const learned = await this.prismaService.learned_guidelines.findFirst({
+        where: {
+          company_id: companyId,
+          scope: 'conversation',
+          is_active: true,
+        },
+        orderBy: { id: 'desc' },
+      })
+
+      if (!learned?.guidelines) return ''
+
+      return `\n\n## What Works With These Buyers\n\nThese lessons come from reviewing this agency's own won and lost conversations. Apply them, but never at the cost of honesty.\n\n${learned.guidelines}`
+    } catch (error) {
+      this.logger.error('Failed to build learned prompt', {
+        companyId,
+        error: error.message,
+      })
+      return ''
     }
   }
 

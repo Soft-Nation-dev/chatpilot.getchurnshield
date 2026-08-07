@@ -22,6 +22,8 @@ import { LeadsModule } from './leads/leads.module'
 import { AdminModule } from './admin/admin.module'
 import { TeamModule } from './team/team.module'
 import { SocialModule } from './social/social.module'
+import { ContentModule } from './content/content.module'
+import { LearningModule } from './learning/learning.module'
 
 @Module({
   imports: [
@@ -63,6 +65,8 @@ import { SocialModule } from './social/social.module'
     AdminModule,
     TeamModule,
     SocialModule,
+    ContentModule,
+    LearningModule,
   ],
   controllers: [AppController],
   providers: [
