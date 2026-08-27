@@ -44,7 +44,6 @@
     "@prisma/client": "^7.0.0",
     "@sentry/nestjs": "^8.51.0",
     "@sentry/profiling-node": "^8.51.0",
-    "@supabase/storage-js": "^2.100.0",
     "@types/multer": "^2.1.0",
     "ai": "^5.0.113",
     "apify-client": "^2.23.4",

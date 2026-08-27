@@ -4,7 +4,7 @@ import { ContactService } from '../contact/contact.service'
 import { ReplyService } from 'src/background-tasks/services/reply.service'
 import { CompanyService } from 'src/company/company.service'
 import { AUTHOR_TYPE, ORIGINAL_MESSAGE_TYPE } from 'src/utils/constants/types'
-import { SupabaseStorageService } from 'src/utils/services/supabase-storage.service'
+import { StorageService } from 'src/utils/services/storage.service'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { generateText } from 'ai'
 import { WhatsBaileyDto } from './dto/whats-bailey.dto'
@@ -29,7 +29,7 @@ export class WebhookService {
     private readonly contactService: ContactService,
     private readonly replyService: ReplyService,
     private readonly companyService: CompanyService,
-    private readonly supabaseStorageService: SupabaseStorageService,
+    private readonly storageService: StorageService,
     private readonly socialAttribution: SocialAttributionService,
   ) {}
 
@@ -234,7 +234,7 @@ export class WebhookService {
   }): Promise<{ success: boolean; mediaUrl: string | null }> {
     try {
       const buffer = Buffer.from(body.mediaBuffer)
-      const mediaUrl = await this.supabaseStorageService.uploadMedia(
+      const mediaUrl = await this.storageService.uploadMedia(
         buffer,
         body.mimeType,
         body.companyPhone,

@@ -28,7 +28,7 @@ export class WebhookController {
     return this.webhookService.updateConnectionStatus(statusDto)
   }
 
-  @ApiOperation({ summary: 'Upload media from WB to Supabase storage' })
+  @ApiOperation({ summary: 'Upload media from WB to local storage' })
   @Post('upload-media')
   uploadMedia(
     @Body()

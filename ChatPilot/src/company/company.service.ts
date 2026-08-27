@@ -10,7 +10,7 @@ import { CreateCompanyDto } from './dto/create-company.dto'
 import { companies } from '@prisma/client'
 import { Company } from 'src/utils/constants/types'
 import { WhatsBaileyService } from 'src/utils/services/whats-bailey.service'
-import { SupabaseStorageService } from 'src/utils/services/supabase-storage.service'
+import { StorageService } from 'src/utils/services/storage.service'
 import { generateText } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { decryptMessagesInPlace } from 'src/common/crypto/message-crypto'
@@ -29,7 +29,7 @@ export class CompanyService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => WhatsBaileyService))
     private readonly whatsBaileyService: WhatsBaileyService,
-    private readonly supabaseStorage: SupabaseStorageService,
+    private readonly storageService: StorageService,
   ) {}
 
   async findByPhone(targetPhone: number) {
@@ -509,7 +509,7 @@ Generate ONLY the system prompt text, no explanations.`,
     file: { originalname: string; buffer: Buffer; mimetype: string },
     description?: string,
   ) {
-    const fileUrl = await this.supabaseStorage.uploadCompanyAsset(
+    const fileUrl = await this.storageService.uploadCompanyAsset(
       companyId,
       file.originalname,
       file.buffer,
@@ -551,8 +551,8 @@ Generate ONLY the system prompt text, no explanations.`,
       throw new UnprocessableEntityException('Asset not found')
     }
 
-    // Delete from Supabase storage
-    await this.supabaseStorage.deleteCompanyAsset(asset.file_url)
+    // Delete from local storage
+    await this.storageService.deleteCompanyAsset(asset.file_url)
 
     // Delete from DB
     await this.prisma.company_assets.delete({

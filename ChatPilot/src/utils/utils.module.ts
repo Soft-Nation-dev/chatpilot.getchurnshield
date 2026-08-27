@@ -5,7 +5,7 @@ import { CompanyModule } from 'src/company/company.module'
 import { WhatsAppFormatter } from './services/whatsapp-formatter.helper'
 import { WhatsBaileyService } from './services/whats-bailey.service'
 import { PromptHelper } from './services/prompt.helper'
-import { SupabaseStorageService } from './services/supabase-storage.service'
+import { StorageService } from './services/storage.service'
 
 @Global()
 @Module({
@@ -17,7 +17,7 @@ import { SupabaseStorageService } from './services/supabase-storage.service'
     WhatsAppFormatter,
     WhatsBaileyService,
     PromptHelper,
-    SupabaseStorageService,
+    StorageService,
   ],
   exports: [
     DatesHelper,
@@ -25,7 +25,7 @@ import { SupabaseStorageService } from './services/supabase-storage.service'
     WhatsAppFormatter,
     WhatsBaileyService,
     PromptHelper,
-    SupabaseStorageService,
+    StorageService,
   ],
 })
 export class UtilsModule {}

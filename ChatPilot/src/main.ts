@@ -2,6 +2,9 @@
 // If you're using CommonJS (CJS) syntax, use `require("./instrument.ts");`
 import './instrument'
 import { NestFactory } from '@nestjs/core'
+import { NestExpressApplication } from '@nestjs/platform-express'
+import { mkdirSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { AppModule } from './app.module'
 import { ValidationPipe } from '@nestjs/common'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
@@ -15,7 +18,7 @@ import { json, urlencoded } from 'express'
 }
 async function bootstrap() {
   const isProduction = process.env.NODE_ENV?.toLowerCase() === 'production'
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: new LoggerService({
       prefix: 'api',
       lokiUrl: process.env.LOKI_URL,
@@ -32,6 +35,10 @@ async function bootstrap() {
     }),
   )
   app.use(urlencoded({ limit: '50mb', extended: true }))
+
+  const uploadsDir = resolve(process.env.UPLOADS_DIR || '/app/uploads')
+  mkdirSync(uploadsDir, { recursive: true })
+  app.useStaticAssets(uploadsDir, { prefix: '/uploads/' })
 
   app.setGlobalPrefix('api/v1')
   if (!isProduction) {

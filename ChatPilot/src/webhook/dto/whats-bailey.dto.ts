@@ -101,9 +101,9 @@ export class WhatsBaileyDto {
 
   @ApiProperty({
     type: 'string',
-    description: 'Media URL after upload to Supabase',
+    description: 'Media URL after upload to storage',
     required: false,
-    example: 'https://example.supabase.co/storage/v1/object/public/ChatPilot-media/123/456/media.jpg',
+    example: 'https://api.trygetchurnshield.com/uploads/chat-media/123/456/media.jpg',
   })
   mediaUrl?: string
 
