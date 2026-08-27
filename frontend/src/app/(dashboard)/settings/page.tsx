@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { getErrorMessage } from '@/lib/error'
+import { API_BASE_URL } from '@/lib/api-base'
 
 type CompanyAsset = {
   id: number
@@ -63,7 +64,7 @@ export default function SettingsPage() {
     try {
       const token = getAccessToken()
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/companies/${companyId}/get_qr`,
+        `${API_BASE_URL}/companies/${companyId}/get_qr`,
         { headers: token ? { Authorization: `Bearer ${token}` } : {} },
       )
       if (!response.ok) {

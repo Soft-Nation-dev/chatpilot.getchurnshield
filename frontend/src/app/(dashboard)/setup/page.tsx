@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { API_BASE_URL } from '@/lib/api-base'
 
 const steps = [
   { num: 1, title: 'Business Description', desc: 'Tell us about your business' },
@@ -118,7 +119,7 @@ export default function SetupPage() {
       }
     } catch {}
 
-    setQrUrl(`${process.env.NEXT_PUBLIC_API_URL}/companies/${companyId}/get_qr?t=${Date.now()}`)
+    setQrUrl(`${API_BASE_URL}/companies/${companyId}/get_qr?t=${Date.now()}`)
     pollRef.current = setInterval(async () => {
       try {
         const res = await api.get(`/companies/${companyId}/connection_status`)
@@ -126,7 +127,7 @@ export default function SetupPage() {
           setConnected(true)
           if (pollRef.current) clearInterval(pollRef.current)
         } else {
-          setQrUrl(`${process.env.NEXT_PUBLIC_API_URL}/companies/${companyId}/get_qr?t=${Date.now()}`)
+          setQrUrl(`${API_BASE_URL}/companies/${companyId}/get_qr?t=${Date.now()}`)
         }
       } catch {}
     }, 5000)

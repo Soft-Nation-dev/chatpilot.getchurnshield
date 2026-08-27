@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { API_BASE_URL } from '@/lib/api-base'
 
 interface AdminCompany {
   id: number
@@ -20,7 +21,7 @@ interface Draft {
   assign: number | ''
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL || ''
+const API = API_BASE_URL
 
 export default function AdminPage() {
   const [secret, setSecret] = useState('')

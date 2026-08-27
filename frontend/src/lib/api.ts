@@ -1,8 +1,9 @@
 import axios from 'axios'
+import { API_BASE_URL } from './api-base'
 import { getAccessToken, getRefreshToken, setTokens, clearTokens } from './auth'
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  baseURL: API_BASE_URL,
 })
 
 api.interceptors.request.use(config => {
@@ -38,7 +39,7 @@ api.interceptors.response.use(
       if (refreshToken) {
         try {
           const res = await axios.post(
-            `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`,
+            `${API_BASE_URL}/auth/refresh`,
             { refresh_token: refreshToken },
           )
           const tokens = res.data?.data || res.data
