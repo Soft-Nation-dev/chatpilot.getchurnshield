@@ -72,6 +72,10 @@ instagram_manage_messages
 4. Confirm that the Page and linked Instagram account show **Active** and
    **Webhook Subscribed**.
 
+During OAuth, ChatPilot subscribes the Page to `feed`, `messages`, and
+`messaging_postbacks`, and subscribes the linked Instagram professional account
+to `comments`, `messages`, and `messaging_postbacks`.
+
 The manual Page-token form is a fallback only. Prefer OAuth so ChatPilot can
 obtain the correct Page token and subscribe the Page automatically.
 

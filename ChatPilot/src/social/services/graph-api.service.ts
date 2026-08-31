@@ -162,6 +162,14 @@ export class GraphApiService {
     )
   }
 
+  subscribeInstagram(igUserId: string, accessToken: string) {
+    return this.post(
+      `${igUserId}/subscribed_apps`,
+      { subscribed_fields: 'comments,messages,messaging_postbacks' },
+      accessToken,
+    )
+  }
+
   unsubscribePage(pageId: string, accessToken: string) {
     return this.del(`${pageId}/subscribed_apps`, accessToken)
   }
