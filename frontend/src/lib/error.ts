@@ -3,6 +3,10 @@
  * Catches raw database/technical errors and returns a clean message.
  */
 export function getErrorMessage(err: unknown, fallback = 'Something went wrong. Please try again.'): string {
+  if (err instanceof Error && !('response' in err)) {
+    return err.message || fallback
+  }
+
   const error = err as {
     response?: {
       data?: {

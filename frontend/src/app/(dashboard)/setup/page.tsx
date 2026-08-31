@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/context/auth-context'
 import api from '@/lib/api'
+import { getErrorMessage } from '@/lib/error'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { API_BASE_URL } from '@/lib/api-base'
 
 const steps = [
   { num: 1, title: 'Business Description', desc: 'Tell us about your business' },
@@ -17,7 +17,7 @@ const steps = [
 ]
 
 export default function SetupPage() {
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const router = useRouter()
 
   const existingDescription =
@@ -25,12 +25,13 @@ export default function SetupPage() {
 
   const [step, setStep] = useState(1)
   const [description, setDescription] = useState(existingDescription)
+  const [savedDescription, setSavedDescription] = useState(existingDescription)
   const [editing, setEditing] = useState(!existingDescription)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const [connectionMode, setConnectionMode] = useState<'choose' | 'qr' | 'pairing'>('choose')
-  const [qrUrl, setQrUrl] = useState('')
+  const [qrImage, setQrImage] = useState('')
   const [connected, setConnected] = useState(false)
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
@@ -41,7 +42,9 @@ export default function SetupPage() {
   useEffect(() => {
     if (user) {
       setDescription(existingDescription)
+      setSavedDescription(existingDescription)
       setEditing(!existingDescription)
+      setStep(existingDescription ? 2 : 1)
     }
   }, [user, existingDescription])
 
@@ -50,14 +53,21 @@ export default function SetupPage() {
     setSaving(true)
     setError('')
     try {
-      await api.put(`/companies/${companyId}/business-details`, { description })
+      const trimmedDescription = description.trim()
+      await api.put(`/companies/${companyId}/business-details`, {
+        description: trimmedDescription,
+        setup_description_saved_at: new Date().toISOString(),
+      })
       try {
         await api.post(`/companies/${companyId}/generate-prompt`)
       } catch {}
+      setDescription(trimmedDescription)
+      setSavedDescription(trimmedDescription)
+      await refreshUser()
       setEditing(false)
       setStep(2)
-    } catch {
-      setError('Could not save description. Please try again.')
+    } catch (cause) {
+      setError(getErrorMessage(cause, 'Could not save description. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -85,9 +95,34 @@ export default function SetupPage() {
     }, 5000)
   }
 
+  const fetchQrCode = async () => {
+    if (!companyId) return false
+    try {
+      const response = await api.get(`/companies/${companyId}/get_qr`, {
+        responseType: 'blob',
+      })
+      const contentType = response.headers['content-type'] || response.data?.type || ''
+      if (!String(contentType).includes('image')) return false
+
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(response.data)
+      })
+      setQrImage(dataUrl)
+      return true
+    } catch (cause) {
+      setError(getErrorMessage(cause, 'Could not load a WhatsApp QR code.'))
+      return false
+    }
+  }
+
   const startQrConnection = async () => {
     if (!companyId) return
     setConnectionMode('qr')
+    setQrImage('')
+    setError('')
 
     try {
       const statusRes = await api.get(`/companies/${companyId}/connection_status`)
@@ -99,14 +134,10 @@ export default function SetupPage() {
 
     try {
       await api.post(`/companies/${companyId}/create_session`)
-    } catch {
-      try {
-        const statusRes = await api.get(`/companies/${companyId}/connection_status`)
-        if (statusRes.data?.state === 'CONNECTED') {
-          setConnected(true)
-          return
-        }
-      } catch {}
+    } catch (cause) {
+      setError(getErrorMessage(cause, 'WhatsApp connection service is unavailable. Please contact support.'))
+      setConnectionMode('choose')
+      return
     }
 
     await new Promise(resolve => setTimeout(resolve, 3000))
@@ -119,7 +150,7 @@ export default function SetupPage() {
       }
     } catch {}
 
-    setQrUrl(`${API_BASE_URL}/companies/${companyId}/get_qr?t=${Date.now()}`)
+    await fetchQrCode()
     pollRef.current = setInterval(async () => {
       try {
         const res = await api.get(`/companies/${companyId}/connection_status`)
@@ -127,7 +158,7 @@ export default function SetupPage() {
           setConnected(true)
           if (pollRef.current) clearInterval(pollRef.current)
         } else {
-          setQrUrl(`${API_BASE_URL}/companies/${companyId}/get_qr?t=${Date.now()}`)
+          await fetchQrCode()
         }
       } catch {}
     }, 5000)
@@ -137,18 +168,26 @@ export default function SetupPage() {
     if (!companyId || !pairingPhone.trim()) return
     setLoadingPairing(true)
     setPairingCode('')
+    setError('')
 
     try {
-      await api.post(`/companies/${companyId}/create_session`, {
+      const normalizedPhone = pairingPhone.replace(/\D/g, '')
+      const sessionResponse = await api.post(`/companies/${companyId}/create_session`, {
         usePairingCode: true,
-        phoneNumber: pairingPhone,
+        phoneNumber: normalizedPhone,
       })
-      await new Promise(resolve => setTimeout(resolve, 2500))
-      const res = await api.get(`/companies/${companyId}/pairing-code`)
-      setPairingCode(res.data?.pairingCode || res.data?.data?.pairingCode || '')
+      let code = sessionResponse.data?.pairingCode || ''
+      if (!code) {
+        await new Promise(resolve => setTimeout(resolve, 2500))
+        const res = await api.get(`/companies/${companyId}/pairing-code`)
+        code = res.data?.pairingCode || res.data?.data?.pairingCode || ''
+      }
+      if (!code) throw new Error('The WhatsApp gateway did not return a pairing code')
+      setPairingCode(code)
       startPolling()
-    } catch {
+    } catch (cause) {
       setPairingCode('')
+      setError(getErrorMessage(cause, 'Could not create a pairing code. Please contact support.'))
     } finally {
       setLoadingPairing(false)
     }
@@ -158,7 +197,7 @@ export default function SetupPage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [])
 
-  const hasDescription = Boolean(existingDescription.trim())
+  const hasDescription = Boolean(savedDescription.trim())
 
   return (
     <div className="mx-auto max-w-xl space-y-8">
@@ -201,6 +240,12 @@ export default function SetupPage() {
         ))}
       </div>
 
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
         {step === 1 && (
           <motion.div
@@ -238,7 +283,7 @@ export default function SetupPage() {
 
                 <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
                   <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-                    {existingDescription}
+                    {savedDescription}
                   </p>
                 </div>
 
@@ -254,11 +299,6 @@ export default function SetupPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {error && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                    {error}
-                  </div>
-                )}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
                     {hasDescription ? 'Edit your business description' : 'Describe your business'}
@@ -278,7 +318,7 @@ export default function SetupPage() {
                     <Button
                       variant="outline"
                       onClick={() => {
-                        setDescription(existingDescription)
+                        setDescription(savedDescription)
                         setEditing(false)
                         setError('')
                       }}
@@ -379,12 +419,12 @@ export default function SetupPage() {
               </div>
             ) : connectionMode === 'qr' ? (
               <div className="space-y-4 py-2 text-center">
-                {qrUrl ? (
+                {qrImage ? (
                   <>
                     <p className="text-sm font-medium text-foreground">Scan with WhatsApp</p>
                     <div className="inline-block rounded-2xl border-2 border-dashed border-emerald-200 bg-white p-4 shadow-sm">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={qrUrl} alt="WhatsApp QR Code" className="h-52 w-52" />
+                      <img src={qrImage} alt="WhatsApp QR Code" className="h-52 w-52" />
                     </div>
                     <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                       <div className="flex gap-1">
@@ -400,7 +440,7 @@ export default function SetupPage() {
                       Waiting for connection...
                     </div>
                     <button
-                      onClick={() => { if (pollRef.current) clearInterval(pollRef.current); setConnectionMode('pairing'); setQrUrl('') }}
+                      onClick={() => { if (pollRef.current) clearInterval(pollRef.current); setConnectionMode('pairing'); setQrImage(''); setError('') }}
                       className="text-xs font-medium text-emerald-600 transition-colors hover:text-emerald-700"
                     >
                       QR not working? Try pairing code
@@ -427,12 +467,15 @@ export default function SetupPage() {
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">Phone Number (with country code)</Label>
                       <Input
-                        placeholder="923001234567"
+                        placeholder="2348012345678"
                         value={pairingPhone}
                         onChange={e => setPairingPhone(e.target.value)}
                         className="h-11 rounded-xl border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
                       />
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Include the country code and omit the leading + or 0. Example: 2348012345678.
+                    </p>
                     <Button
                       onClick={startPairingConnection}
                       disabled={loadingPairing || !pairingPhone.trim()}

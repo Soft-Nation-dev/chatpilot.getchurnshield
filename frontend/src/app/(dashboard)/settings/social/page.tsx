@@ -137,6 +137,39 @@ export default function SocialSettingsPage() {
         </div>
       )}
 
+      <div className="rounded-2xl border border-blue-200/70 bg-gradient-to-br from-blue-50 to-indigo-50 p-5">
+        <h3 className="font-semibold text-slate-900">How to connect Facebook and Instagram</h3>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          {[
+            {
+              number: '1',
+              title: 'Prepare Meta',
+              text: 'Use a Facebook account that is an admin of your Facebook Page. For Instagram, first link a Professional Instagram account to that Page.',
+            },
+            {
+              number: '2',
+              title: 'Authorize ChatPilot',
+              text: 'Select Connect with Facebook, sign in to Meta, choose the Page you want to use, and approve every requested messaging and engagement permission.',
+            },
+            {
+              number: '3',
+              title: 'Confirm the connection',
+              text: 'Meta returns you here. The Page and linked Instagram account should show Active and Webhook Subscribed before automated replies can run.',
+            },
+          ].map(item => (
+            <div key={item.number} className="rounded-xl border border-white/80 bg-white/80 p-4 shadow-sm">
+              <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">{item.number}</div>
+              <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-600">{item.text}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 text-xs leading-relaxed text-slate-600">
+          If you see “meta not configured”, the server administrator must add META_APP_ID,
+          META_APP_SECRET, META_VERIFY_TOKEN, and META_OAUTH_REDIRECT_URI on Hostinger, then restart the API.
+        </p>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         {accounts.map((account, index) => (
           <motion.div key={account.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }} className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
@@ -173,7 +206,7 @@ export default function SocialSettingsPage() {
       {isOwner && (
         <div className="rounded-2xl border border-slate-200/60 bg-white p-5">
           <button type="button" onClick={() => setShowManual(value => !value)} className="flex w-full items-center justify-between text-left">
-            <div><h3 className="font-semibold text-slate-900">Advanced manual connection</h3><p className="text-sm text-slate-500">Use a long-lived Page access token when OAuth is unavailable.</p></div>
+            <div><h3 className="font-semibold text-slate-900">Advanced manual connection</h3><p className="text-sm text-slate-500">For administrators only: use a long-lived Page access token when OAuth is unavailable.</p></div>
             <span className="text-xl text-slate-400">{showManual ? '−' : '+'}</span>
           </button>
           {showManual && (

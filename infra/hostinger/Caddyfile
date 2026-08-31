@@ -1,0 +1,3 @@
+api.trygetchurnshield.com {
+    reverse_proxy chatpilot:3000
+}

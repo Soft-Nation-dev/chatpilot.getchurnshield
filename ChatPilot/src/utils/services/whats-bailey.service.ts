@@ -1,12 +1,12 @@
 import {
   forwardRef,
   HttpException,
-  HttpStatus,
   Inject,
   Injectable,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common'
-import axios from 'axios'
+import axios, { AxiosError } from 'axios'
 import { ConfigsService } from 'src/config'
 import { Company, Contact } from '../constants/types'
 import * as QRCode from 'qrcode'
@@ -22,7 +22,33 @@ export class WhatsBaileyService {
   ) {}
 
   private get serverUrl(): string {
-    return this.config.wbBaseUrl
+    try {
+      return this.config.wbBaseUrl.replace(/\/+$/, '')
+    } catch {
+      throw new ServiceUnavailableException(
+        'WhatsApp connection service is not configured. Set WB_BASE_URL and deploy the WB gateway.',
+      )
+    }
+  }
+
+  private unavailable(operation: string, error: unknown): never {
+    if (error instanceof HttpException) throw error
+
+    const axiosError = error as AxiosError<any>
+    const upstreamStatus = axiosError.response?.status
+    const upstreamMessage =
+      axiosError.response?.data?.message || axiosError.response?.data?.error
+
+    this.logger.error(`WhatsApp gateway ${operation} failed`, {
+      status: upstreamStatus,
+      error: axiosError.message,
+      upstreamMessage,
+    })
+
+    throw new ServiceUnavailableException(
+      upstreamMessage ||
+        'WhatsApp connection service is unavailable. Please contact support or try again after the gateway is deployed.',
+    )
   }
 
   async sendMessage(
@@ -122,7 +148,7 @@ export class WhatsBaileyService {
       }
       const url = `${this.serverUrl}/api/v1/whatsapp/sessions/${company.session_id}/status`
       this.logger.log('URL:', url)
-      const response = await axios.get(url)
+      const response = await axios.get(url, { timeout: 15000 })
 
       if (response.status !== 200) {
         this.logger.error('error while fetching bailey session status', {
@@ -152,7 +178,9 @@ export class WhatsBaileyService {
       })
       return {
         success: false,
-        message: 'error during WhatsBailey status api call',
+        state: 'UNAVAILABLE',
+        message: 'WhatsApp connection service is unavailable',
+        error: 'gateway_unavailable',
       }
     }
   }
@@ -167,38 +195,26 @@ export class WhatsBaileyService {
   }> {
     const url = `${this.serverUrl}/api/v1/whatsapp/sessions/qrcode/${company.session_id}`
 
-    const response = await axios.get(url)
-    if (response.status !== 200 || !response.data.success) {
-      this.logger.error(
-        `Error starting session: ${response.status} ${response.data}`,
-      )
-      res.setHeader('Content-Type', 'application/json')
-      return res.send({
-        statusCode: 201,
-        data: response.data,
-        error: null,
-      })
-    }
-    if (!response.data.qr) {
-      return res.send({
-        statusCode: 201,
-        data: response.data,
-        message: response.data.message,
-        error: null,
-      })
-    }
-
     try {
+      const response = await axios.get(url, { timeout: 15000 })
+      if (response.status !== 200 || !response.data.success) {
+        throw new ServiceUnavailableException(
+          response.data?.message || 'WhatsApp QR code is not ready yet',
+        )
+      }
+      if (!response.data.qr) {
+        throw new ServiceUnavailableException(
+          response.data?.message || 'WhatsApp QR code is not ready yet',
+        )
+      }
+
       const qrCodeImage = await QRCode.toBuffer(response.data.qr)
 
       res.setHeader('Content-Type', 'image/png')
 
       return res.send(qrCodeImage)
     } catch (error) {
-      throw new HttpException(
-        'Failed to generate QR code',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      )
+      return this.unavailable('QR request', error)
     }
   }
   async startSession(
@@ -219,16 +235,20 @@ export class WhatsBaileyService {
       body.phoneNumber = phoneNumber
     }
 
-    const response = await axios.post(url, body)
+    try {
+      const response = await axios.post(url, body, { timeout: 75000 })
 
-    if (response.status !== 201) {
-      const errorMessage = `Error starting session: ${response.status} ${response.data}`
-      this.logger.error(errorMessage)
+      if (response.status !== 201 || !response.data?.success) {
+        const message = response.data?.message || 'WhatsApp session could not be started'
+        this.logger.error(message)
+        return { success: false, message }
+      }
+
+      this.logger.log('Session started successfully:', response.data)
       return response.data
+    } catch (error) {
+      return this.unavailable('session start', error)
     }
-
-    this.logger.log('Session started successfully:', response.data)
-    return response.data
   }
 
   async getPairingCode(company: Company): Promise<{
@@ -238,11 +258,10 @@ export class WhatsBaileyService {
   }> {
     try {
       const url = `${this.serverUrl}/api/v1/whatsapp/sessions/pairingcode/${company.session_id}`
-      const response = await axios.get(url)
+      const response = await axios.get(url, { timeout: 15000 })
       return response.data
     } catch (error) {
-      this.logger.error('Error getting pairing code:', error?.message)
-      return { success: false, message: 'Error getting pairing code' }
+      return this.unavailable('pairing-code request', error)
     }
   }
 

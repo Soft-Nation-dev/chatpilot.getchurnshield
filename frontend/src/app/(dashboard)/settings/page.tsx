@@ -43,6 +43,7 @@ export default function SettingsPage() {
   const [pairingPhone, setPairingPhone] = useState('')
   const [pairingCode, setPairingCode] = useState('')
   const [loadingPairing, setLoadingPairing] = useState(false)
+  const [connectionError, setConnectionError] = useState('')
   const [disconnecting, setDisconnecting] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleteOtp, setDeleteOtp] = useState('')
@@ -68,23 +69,30 @@ export default function SettingsPage() {
         { headers: token ? { Authorization: `Bearer ${token}` } : {} },
       )
       if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        setConnectionError(payload?.message || 'Could not load a WhatsApp QR code.')
         setQrError(true)
-        return
+        return false
       }
       const contentType = response.headers.get('content-type') || ''
       if (!contentType.includes('image')) {
+        setConnectionError('The WhatsApp gateway did not return a QR code yet.')
         setQrError(true)
-        return
+        return false
       }
       const blob = await response.blob()
       const reader = new FileReader()
       reader.onloadend = () => {
         setQrBase64(reader.result as string)
         setQrError(false)
+        setConnectionError('')
       }
       reader.readAsDataURL(blob)
-    } catch {
+      return true
+    } catch (cause) {
+      setConnectionError(getErrorMessage(cause, 'Could not load a WhatsApp QR code.'))
       setQrError(true)
+      return false
     }
   }, [companyId])
 
@@ -231,6 +239,7 @@ export default function SettingsPage() {
     setQrError(false)
     setPairingCode('')
     setPairingPhone('')
+    setConnectionError('')
     setShowConnectDialog(true)
   }
 
@@ -253,11 +262,16 @@ export default function SettingsPage() {
     setConnectMode('qr')
     setQrBase64(null)
     setQrError(false)
+    setConnectionError('')
     setConnectionStatus('Connecting...')
 
     try {
       await api.post(`/companies/${companyId}/create_session`)
-    } catch {
+    } catch (cause) {
+      setConnectionError(getErrorMessage(cause, 'WhatsApp connection service is unavailable. Please contact support.'))
+      setConnectionStatus('Disconnected')
+      setQrError(true)
+      return
     }
 
     await new Promise(resolve => setTimeout(resolve, 1500))
@@ -287,19 +301,27 @@ export default function SettingsPage() {
     setLoadingPairing(true)
     setPairingCode('')
     setConnectionStatus('Connecting...')
+    setConnectionError('')
 
     try {
-      await api.post(`/companies/${companyId}/create_session`, {
+      const normalizedPhone = pairingPhone.replace(/\D/g, '')
+      const sessionResponse = await api.post(`/companies/${companyId}/create_session`, {
         usePairingCode: true,
-        phoneNumber: pairingPhone,
+        phoneNumber: normalizedPhone,
       })
-      await new Promise(resolve => setTimeout(resolve, 2500))
-      const res = await api.get(`/companies/${companyId}/pairing-code`)
-      setPairingCode(res.data?.pairingCode || res.data?.data?.pairingCode || '')
+      let code = sessionResponse.data?.pairingCode || ''
+      if (!code) {
+        await new Promise(resolve => setTimeout(resolve, 2500))
+        const res = await api.get(`/companies/${companyId}/pairing-code`)
+        code = res.data?.pairingCode || res.data?.data?.pairingCode || ''
+      }
+      if (!code) throw new Error('The WhatsApp gateway did not return a pairing code')
+      setPairingCode(code)
       setConnectionStatus('Disconnected')
       startPolling()
-    } catch {
+    } catch (cause) {
       setPairingCode('')
+      setConnectionError(getErrorMessage(cause, 'Could not create a pairing code. Please contact support.'))
       setConnectionStatus('Disconnected')
     } finally {
       setLoadingPairing(false)
@@ -804,6 +826,12 @@ export default function SettingsPage() {
             </DialogTitle>
           </DialogHeader>
 
+          {connectionError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {connectionError}
+            </div>
+          )}
+
           {connectMode === 'choose' && (
             <div className="space-y-3 py-4">
               <p className="text-sm text-muted-foreground text-center mb-4">Choose how to connect your WhatsApp</p>
@@ -890,12 +918,15 @@ export default function SettingsPage() {
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                       </div>
                       <Input
-                        placeholder="923001234567"
+                        placeholder="2348012345678"
                         value={pairingPhone}
                         onChange={e => setPairingPhone(e.target.value)}
                         className="pl-10 h-11 rounded-xl bg-white border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
                       />
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Include the country code and omit the leading + or 0. Example: 2348012345678.
+                    </p>
                   </div>
                   <Button
                     onClick={startPairingConnection}

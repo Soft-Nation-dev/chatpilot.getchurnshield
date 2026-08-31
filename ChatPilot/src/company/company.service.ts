@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common'
 import { PrismaService } from 'src/prisma/prisma.service'
@@ -66,12 +67,24 @@ export class CompanyService {
       throw new UnprocessableEntityException('Phone number is required when using pairing code')
     }
 
+    if (usePairingCode) {
+      phoneNumber = phoneNumber!.replace(/\D/g, '')
+      if (phoneNumber.length < 8 || phoneNumber.length > 15) {
+        throw new UnprocessableEntityException(
+          'Enter the WhatsApp number with country code, using 8 to 15 digits and no leading +',
+        )
+      }
+    }
+
     // If session already exists, check if truly active
     if (company.session_id) {
       const sessionStatus =
         await this.whatsBaileyService.getSessionStatus(company)
       if (sessionStatus.success) {
         throw new UnprocessableEntityException(sessionStatus.message)
+      }
+      if (sessionStatus.error === 'gateway_unavailable') {
+        throw new ServiceUnavailableException(sessionStatus.message)
       }
       // Remove stale session so fresh QR is generated
       try {
@@ -201,9 +214,20 @@ export class CompanyService {
   }
 
   async updateBusinessDetails(companyId: number, details: Record<string, any>) {
+    const company = await this.prisma.companies.findUnique({
+      where: { id: companyId },
+      select: { business_details: true },
+    })
+    if (!company) throw new UnprocessableEntityException('Company not found')
+
+    const existing =
+      company.business_details && typeof company.business_details === 'object'
+        ? (company.business_details as Record<string, any>)
+        : {}
+
     return await this.prisma.companies.update({
       where: { id: companyId },
-      data: { business_details: details },
+      data: { business_details: { ...existing, ...details } },
     })
   }
 

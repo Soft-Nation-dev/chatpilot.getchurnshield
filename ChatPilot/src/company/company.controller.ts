@@ -172,28 +172,51 @@ export class CompanyController {
   }
 
   @ApiOperation({ summary: 'Create Session for Company (QR or Pairing Code)' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Post(':id/create_session')
   async createSession(
+    @Request() req: any,
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { usePairingCode?: boolean; phoneNumber?: string },
   ) {
+    await this.verifyOwnership(req.user.userId, id)
     return await this.companyService.createSession(id, body?.usePairingCode, body?.phoneNumber)
   }
 
   @ApiOperation({ summary: 'Get pairing code for Company session' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Get(':id/pairing-code')
-  async getPairingCode(@Param('id', ParseIntPipe) id: number) {
+  async getPairingCode(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    await this.verifyOwnership(req.user.userId, id)
     return await this.companyService.getPairingCode(id)
   }
 
   @ApiOperation({ summary: 'Get  wapi Session status for Company ' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Get(':id/connection_status')
-  async getSessionStatus(@Param('id', ParseIntPipe) id: number) {
+  async getSessionStatus(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    await this.verifyOwnership(req.user.userId, id)
     return await this.companyService.getSessionStatus(id)
   }
   @ApiOperation({ summary: 'Get wapi QrCode for Company ' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @Get(':id/get_qr')
-  async getQrCode(@Res() res: Response, @Param('id', ParseIntPipe) id: number) {
+  async getQrCode(
+    @Request() req: any,
+    @Res() res: Response,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    await this.verifyOwnership(req.user.userId, id)
     return await this.companyService.getSessionQrCode(res, id)
   }
 

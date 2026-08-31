@@ -26,4 +26,6 @@ COPY prisma ./prisma
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+# ChatPilot owns the shared PostgreSQL migration history. The gateway only
+# consumes the WhatsApp tables and must not run its separate migration chain.
+CMD ["node", "dist/main"]

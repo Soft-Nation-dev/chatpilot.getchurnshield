@@ -304,10 +304,11 @@ export default function DashboardPage() {
 
       <motion.div variants={item}>
         <h3 className="mb-3 font-semibold text-foreground">Quick actions</h3>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { href: '/chats', title: 'View chats', desc: 'See all customer conversations', color: 'from-blue-500 to-blue-600', bg: 'bg-blue-50 hover:bg-blue-100/80' },
             { href: '/setup', title: 'Setup wizard', desc: 'Configure AI and WhatsApp', color: 'from-emerald-500 to-emerald-600', bg: 'bg-emerald-50 hover:bg-emerald-100/80' },
+            { href: '/settings/social', title: 'Connect social', desc: 'Link Facebook and Instagram', color: 'from-blue-500 to-indigo-600', bg: 'bg-blue-50 hover:bg-blue-100/80' },
             { href: '/settings', title: 'Settings', desc: 'Business details and preferences', color: 'from-violet-500 to-violet-600', bg: 'bg-violet-50 hover:bg-violet-100/80' },
           ].map((action) => (
             <Link key={action.href} href={action.href}>
