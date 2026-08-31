@@ -306,6 +306,7 @@ export default function DashboardPage() {
         <h3 className="mb-3 font-semibold text-foreground">Quick actions</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
+            { href: '/content', title: 'Content & live test', desc: 'Publish and test social comments', color: 'from-amber-500 to-orange-600', bg: 'bg-amber-50 hover:bg-amber-100/80' },
             { href: '/chats', title: 'View chats', desc: 'See all customer conversations', color: 'from-blue-500 to-blue-600', bg: 'bg-blue-50 hover:bg-blue-100/80' },
             { href: '/setup', title: 'Setup wizard', desc: 'Configure AI and WhatsApp', color: 'from-emerald-500 to-emerald-600', bg: 'bg-emerald-50 hover:bg-emerald-100/80' },
             { href: '/settings/social', title: 'Connect social', desc: 'Link Facebook and Instagram', color: 'from-blue-500 to-indigo-600', bg: 'bg-blue-50 hover:bg-blue-100/80' },
