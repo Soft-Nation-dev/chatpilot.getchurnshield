@@ -41,5 +41,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
-          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+          # Canonical production endpoints. Pinning them prevents a stale
+          # repository variable from compiling the retired domain into JS.
+          NEXT_PUBLIC_API_URL: https://api.trygetchurnshield.com/api/v1
+          NEXT_PUBLIC_SITE_URL: https://chatpilot.trygetchurnshield.com

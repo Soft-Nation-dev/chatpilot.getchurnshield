@@ -13,8 +13,9 @@ The production stack is three services, orchestrated by `deployment/`:
 | frontend  | `frontend`   | Next.js 14          | Agency dashboard + admin console                            |
 | baily     | `WB`         | NestJS + Baileys    | WhatsApp gateway (send/receive, session management)         |
 
-Redis (BullMQ queues) and Postgres back the stack. Caddy fronts three subdomains
-(`getchurnshield.chat-pilot.dev` → frontend, `api.…` → backend, `ws.…` → baily).
+Redis (BullMQ queues) and Postgres back the stack. Cloudflare serves
+`chatpilot.trygetchurnshield.com`, Caddy serves `api.trygetchurnshield.com`,
+and the WhatsApp gateway stays private inside Docker.
 
 ## How it works
 
