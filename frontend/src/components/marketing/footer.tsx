@@ -12,17 +12,17 @@ const columns = [
   {
     title: "Company",
     links: [
-      { href: "#", label: "About" },
-      { href: "#", label: "Contact" },
-      { href: "#", label: "Blog" },
+      { href: "/", label: "About" },
+      { href: "mailto:getchurnshield@gmail.com", label: "Contact" },
+      { href: "/how-it-works", label: "How it works" },
     ],
   },
   {
     title: "Legal",
     links: [
-      { href: "#", label: "Privacy" },
-      { href: "#", label: "Terms" },
-      { href: "#", label: "Security" },
+      { href: "/privacy", label: "Privacy" },
+      { href: "/terms", label: "Terms" },
+      { href: "/data-deletion", label: "Data deletion" },
     ],
   },
 ]

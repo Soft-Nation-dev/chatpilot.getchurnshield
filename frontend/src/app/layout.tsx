@@ -50,6 +50,7 @@ export const metadata: Metadata = {
     apple: { url: "/apple-touch-icon.png", sizes: "180x180" },
     shortcut: "/favicon.ico",
   },
+  category: "business",
   manifest: "/site.webmanifest",
   openGraph: {
     type: "website",
