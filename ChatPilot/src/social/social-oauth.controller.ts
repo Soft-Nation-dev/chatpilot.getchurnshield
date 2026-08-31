@@ -103,12 +103,7 @@ export class SocialOauthController {
     })
 
     const pageId = dto.page_id || dto.external_id
-    const subscribed = dto.platform === 'instagram'
-      ? await this.graph.subscribeInstagram(
-          dto.ig_user_id || dto.external_id,
-          dto.access_token,
-        )
-      : await this.graph.subscribePage(pageId, dto.access_token)
+    const subscribed = await this.graph.subscribePage(pageId, dto.access_token)
     if (subscribed.success) {
       await this.socialAccountService.markSubscribed(account.id)
     } else {

@@ -118,17 +118,8 @@ export class SocialOauthService {
           scopes: SCOPES,
         })
 
-        const igSubscribed = await this.graph.subscribeInstagram(
-          ig.id,
-          page.access_token,
-        )
-        if (igSubscribed.success) {
+        if (subscribed.success) {
           await this.socialAccountService.markSubscribed(igAccount.id)
-        } else {
-          await this.socialAccountService.recordError(
-            igAccount.id,
-            igSubscribed.error ?? 'Instagram subscribe failed',
-          )
         }
         connected.push(`instagram:${ig.id}`)
       }
