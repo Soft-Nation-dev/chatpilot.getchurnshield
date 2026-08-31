@@ -33,6 +33,9 @@ WhatsApp gateway. See [`docs/HOSTINGER_DEPLOYMENT.md`](docs/HOSTINGER_DEPLOYMENT
 environment variables, and safe rollout commands. Secrets live in `.env` files on the server
 (never committed).
 
+For Facebook/Instagram OAuth, webhooks, and the two-stage social-to-WhatsApp
+test, see [`docs/META_LIVE_TEST.md`](docs/META_LIVE_TEST.md).
+
 ## Notes
 
 - Outbound cold-DM scraping (Apify) is disabled (`SCRAPING_ENABLED=false`) — the model is inbound only.
