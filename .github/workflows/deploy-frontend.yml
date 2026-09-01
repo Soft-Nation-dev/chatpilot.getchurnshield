@@ -36,6 +36,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Ensure Cloudflare media bucket exists
+        shell: bash
+        run: |
+          if ! npx wrangler r2 bucket info churnshield-media >/dev/null 2>&1; then
+            npx wrangler r2 bucket create churnshield-media
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy Worker
         run: npm run deploy
         env:

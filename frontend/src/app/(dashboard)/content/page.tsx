@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Facebook,
   Instagram,
+  ImageIcon,
   Loader2,
   MessageCircle,
   PencilLine,
@@ -22,7 +23,7 @@ import { useAuth } from '@/context/auth-context'
 import api from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -240,9 +241,14 @@ function ContentCard({
               <Input id={`hashtags-${post.id}`} value={hashtags} onChange={event => setHashtags(event.target.value)} placeholder="#LagosRealEstate #PropertyTips" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor={`image-${post.id}`}>Public image URL</Label>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor={`image-${post.id}`}>Public image URL</Label>
+                <Link href="/media" className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:text-emerald-800">
+                  <ImageIcon className="h-3.5 w-3.5" /> Media Library
+                </Link>
+              </div>
               <Input id={`image-${post.id}`} value={imageUrl} onChange={event => setImageUrl(event.target.value)} placeholder="https://example.com/property.jpg" />
-              <p className="text-[11px] leading-relaxed text-slate-400">Required for Instagram. Meta must be able to open this HTTPS URL without signing in.</p>
+              <p className="text-[11px] leading-relaxed text-slate-400">Required for Instagram. Upload in Media Library if you do not already have a public HTTPS URL.</p>
             </div>
           </div>
           <div className="space-y-2">
@@ -303,7 +309,9 @@ export default function ContentPage() {
   const [facebook, setFacebook] = useState(true)
   const [instagram, setInstagram] = useState(false)
   const [error, setError] = useState('')
+  const [generationError, setGenerationError] = useState('')
   const [notice, setNotice] = useState('')
+  const [platformDefaultsApplied, setPlatformDefaultsApplied] = useState(false)
 
   const loadData = useCallback(async (quiet = false) => {
     if (!companyId) return
@@ -325,6 +333,13 @@ export default function ContentPage() {
 
   useEffect(() => { loadData() }, [loadData])
   useEffect(() => {
+    const selectedImage = new URLSearchParams(window.location.search).get('image')
+    if (selectedImage?.startsWith('https://')) {
+      setImageUrl(selectedImage)
+      setNotice('Image selected from Media Library. Choose Instagram and generate your draft.')
+    }
+  }, [])
+  useEffect(() => {
     const interval = window.setInterval(() => loadData(true), 10000)
     return () => window.clearInterval(interval)
   }, [loadData])
@@ -333,6 +348,17 @@ export default function ContentPage() {
     facebook: accounts.some(account => account.platform === 'facebook' && account.is_active && account.subscribed_at),
     instagram: accounts.some(account => account.platform === 'instagram' && account.is_active && account.subscribed_at),
   }), [accounts])
+
+  useEffect(() => {
+    if (platformDefaultsApplied || accounts.length === 0) return
+    const activeFacebook = accounts.some(account => account.platform === 'facebook' && account.is_active)
+    const activeInstagram = accounts.some(account => account.platform === 'instagram' && account.is_active)
+    if (activeInstagram && !activeFacebook) {
+      setFacebook(false)
+      setInstagram(true)
+    }
+    setPlatformDefaultsApplied(true)
+  }, [accounts, platformDefaultsApplied])
 
   const stats = useMemo(() => ({
     drafts: posts.filter(post => post.status !== 'published').length,
@@ -348,6 +374,7 @@ export default function ContentPage() {
   const generate = async (event: FormEvent) => {
     event.preventDefault()
     setError('')
+    setGenerationError('')
     setNotice('')
     try {
       if (!facebook && !instagram) throw new Error('Select at least one platform.')
@@ -368,7 +395,10 @@ export default function ContentPage() {
       setNotice('Draft generated. Review it below, then select Publish now.')
       await loadData(true)
     } catch (cause) {
-      setError(getErrorMessage(cause, 'Could not generate a draft. Confirm GEMINI_API_KEY is configured on the backend.'))
+      setGenerationError(getErrorMessage(
+        cause,
+        'The AI service could not generate a draft. The server administrator should confirm GEMINI_API_KEY is valid in Hostinger and restart the chatpilot container.',
+      ))
     } finally {
       setGenerating(false)
     }
@@ -465,14 +495,24 @@ export default function ContentPage() {
               <Textarea id="topic" value={topic} onChange={event => setTopic(event.target.value)} rows={3} placeholder="Example: Three documents every land buyer should verify before paying" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-image">Public image URL {instagram ? '(required)' : '(optional)'}</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="new-image">Public image URL {instagram ? '(required)' : '(optional)'}</Label>
+                <Link href="/media" className={buttonVariants({ variant: 'outline', size: 'sm' })}><ImageIcon className="mr-2 h-4 w-4" />Upload or choose image</Link>
+              </div>
               <Input id="new-image" value={imageUrl} onChange={event => setImageUrl(event.target.value)} placeholder="https://example.com/property.jpg" />
-              <p className="text-xs text-slate-400">Use a direct, public HTTPS image URL. Instagram cannot publish a text-only post.</p>
+              <p className="text-xs text-slate-400">No public link yet? Go to Media Library, upload the image, then click “Use in content.” Instagram cannot publish a text-only post.</p>
             </div>
-            <Button type="submit" disabled={generating || !companyId}>
-              {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-              {generating ? 'Generating draft…' : 'Generate draft'}
-            </Button>
+            <div className="space-y-3">
+              <Button type="submit" disabled={generating || !companyId}>
+                {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                {generating ? 'Generating draft…' : 'Generate draft'}
+              </Button>
+              {generationError && (
+                <div aria-live="assertive" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed text-red-700">
+                  <strong>Draft was not created.</strong> {generationError}
+                </div>
+              )}
+            </div>
           </form>
         </section>
 
