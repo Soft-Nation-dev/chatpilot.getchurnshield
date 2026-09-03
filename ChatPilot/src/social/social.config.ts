@@ -27,7 +27,7 @@ export const socialConfig = {
   replyEnabled: bool('META_REPLY_ENABLED', true),
   privateReplyEnabled: bool('META_PRIVATE_REPLY_ENABLED', false),
   maxRepliesPerHourPerAccount: num('META_MAX_REPLIES_PER_HOUR', 30),
-  intentModel: str('META_INTENT_MODEL', 'gemini-2.5-flash'),
+  intentModel: str('META_INTENT_MODEL', 'gemini-3.6-flash'),
   intentThreshold: num('META_INTENT_THRESHOLD', 0.6),
   dedupeWindowMin: num('META_DEDUPE_WINDOW_MIN', 60),
   waPrefillTemplate: str(

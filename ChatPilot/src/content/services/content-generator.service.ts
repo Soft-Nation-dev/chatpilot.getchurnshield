@@ -8,7 +8,7 @@ import {
   buildContentUserPrompt,
 } from '../constants/content-prompt'
 
-const CONTENT_MODEL = process.env.CONTENT_MODEL || 'gemini-2.5-flash'
+const CONTENT_MODEL = process.env.CONTENT_MODEL || 'gemini-3.6-flash'
 
 @Injectable()
 export class ContentGeneratorService {

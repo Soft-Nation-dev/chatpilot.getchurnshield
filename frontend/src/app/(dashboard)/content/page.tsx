@@ -5,6 +5,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   CheckCircle2,
+  Ban,
+  CalendarClock,
   ChevronDown,
   Clock3,
   ExternalLink,
@@ -37,6 +39,7 @@ type ContentPost = {
   image_urls: string | null
   platforms: string | null
   status: string
+  scheduled_at: string | null
   published_at: string | null
   fb_post_id: string | null
   ig_post_id: string | null
@@ -69,6 +72,13 @@ const statusStyle: Record<string, string> = {
   scheduled: 'border-violet-200 bg-violet-50 text-violet-700',
   published: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   failed: 'border-red-200 bg-red-50 text-red-700',
+  rejected: 'border-slate-200 bg-slate-50 text-slate-500',
+}
+
+function localDateTime(value: string | null) {
+  const date = value ? new Date(value) : new Date(Date.now() + 60 * 60 * 1000)
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 16)
 }
 
 function splitPlatforms(value: string | null) {
@@ -120,6 +130,7 @@ function ContentCard({
   const [imageUrl, setImageUrl] = useState(post.image_urls || '')
   const [facebook, setFacebook] = useState(initialPlatforms.facebook)
   const [instagram, setInstagram] = useState(initialPlatforms.instagram)
+  const [scheduledAt, setScheduledAt] = useState(localDateTime(post.scheduled_at))
   const [expanded, setExpanded] = useState(post.status !== 'published')
   const [busy, setBusy] = useState<'save' | 'publish' | 'delete' | null>(null)
   const [error, setError] = useState('')
@@ -130,6 +141,7 @@ function ContentCard({
     hashtags: hashtags.trim(),
     image_urls: imageUrl.trim(),
     platforms: [facebook && 'facebook', instagram && 'instagram'].filter(Boolean).join(','),
+    ...(scheduledAt ? { scheduled_at: new Date(scheduledAt).toISOString() } : {}),
   })
 
   const validate = () => {
@@ -179,6 +191,43 @@ function ContentCard({
     } catch (cause) {
       setError(getErrorMessage(cause, 'Could not publish this post. Check the connected account and try again.'))
       await onChanged()
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleApprove = async () => {
+    setBusy('save')
+    setError('')
+    setNotice('')
+    try {
+      validate()
+      if (!scheduledAt) throw new Error('Choose when this post should publish.')
+      await api.put(`/companies/${companyId}/content/${post.id}`, {
+        ...payload(),
+        status: 'scheduled',
+        scheduled_at: new Date(scheduledAt).toISOString(),
+      })
+      setNotice('Post approved and scheduled.')
+      await onChanged('Post approved. It will publish automatically at the scheduled time.')
+    } catch (cause) {
+      setError(getErrorMessage(cause, 'Could not approve this post.'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleReject = async () => {
+    if (!window.confirm('Reject this draft? It will remain in the history but cannot publish.')) return
+    setBusy('save')
+    setError('')
+    try {
+      await api.put(`/companies/${companyId}/content/${post.id}`, { status: 'rejected' })
+      setNotice('Draft rejected.')
+      await onChanged()
+      setExpanded(false)
+    } catch (cause) {
+      setError(getErrorMessage(cause, 'Could not reject this draft.'))
     } finally {
       setBusy(null)
     }
@@ -235,6 +284,13 @@ function ContentCard({
             <Label htmlFor={`caption-${post.id}`}>Caption</Label>
             <Textarea id={`caption-${post.id}`} value={caption} onChange={event => setCaption(event.target.value)} rows={8} />
           </div>
+          {post.status !== 'published' && post.status !== 'rejected' && (
+            <div className="space-y-2">
+              <Label htmlFor={`schedule-${post.id}`}>Scheduled publishing time</Label>
+              <Input id={`schedule-${post.id}`} type="datetime-local" value={scheduledAt} onChange={event => setScheduledAt(event.target.value)} />
+              <p className="text-[11px] leading-relaxed text-slate-400">Approval does not publish immediately. The scheduler publishes at this time.</p>
+            </div>
+          )}
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor={`hashtags-${post.id}`}>Hashtags</Label>
@@ -271,13 +327,23 @@ function ContentCard({
               Delete
             </Button>
             <div className="flex flex-wrap gap-2">
-              {post.status !== 'published' && (
+              {post.status !== 'published' && post.status !== 'rejected' && (
                 <Button variant="outline" onClick={handleSave} disabled={busy !== null}>
                   {busy === 'save' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PencilLine className="mr-2 h-4 w-4" />}
                   Save draft
                 </Button>
               )}
-              {post.status !== 'published' && (
+              {post.status === 'draft' && (
+                <Button variant="outline" onClick={handleReject} disabled={busy !== null} className="text-slate-600">
+                  <Ban className="mr-2 h-4 w-4" />Reject
+                </Button>
+              )}
+              {post.status !== 'published' && post.status !== 'rejected' && (
+                <Button variant="outline" onClick={handleApprove} disabled={busy !== null}>
+                  <CalendarClock className="mr-2 h-4 w-4" />Approve & schedule
+                </Button>
+              )}
+              {post.status !== 'published' && post.status !== 'rejected' && (
                 <Button onClick={handlePublish} disabled={busy !== null}>
                   {busy === 'publish' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                   Publish now
@@ -442,6 +508,13 @@ export default function ContentPage() {
         ))}
       </div>
 
+      <section className="rounded-2xl border border-emerald-200/70 bg-gradient-to-r from-emerald-50 via-white to-blue-50 p-5 shadow-sm lg:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div><h3 className="font-semibold text-slate-900">Let the Property Vault drive your content</h3><p className="mt-1 text-sm text-slate-600">Upload verified property facts once, then let automation prepare approval-ready drafts on schedule.</p></div>
+          <div className="flex flex-wrap gap-2"><Link href="/properties" className={buttonVariants({ variant: 'outline' })}><ImageIcon className="mr-2 h-4 w-4" />Property Vault</Link><Link href="/automation" className={buttonVariants()}><CalendarClock className="mr-2 h-4 w-4" />Automation settings</Link></div>
+        </div>
+      </section>
+
       <section className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm lg:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -530,7 +603,7 @@ export default function ContentPage() {
               <div key={number} className="flex gap-3"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">{number}</span><p className="pt-1 text-sm leading-relaxed text-slate-700">{text}</p></div>
             ))}
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-relaxed text-amber-800">
-              <strong>Development mode:</strong> the commenting Facebook/Instagram account must be added under App roles and must have accepted the invitation. Do not comment as the Page itself.
+              <strong>Meta testing:</strong> if the Meta app is unpublished, the commenting account must be an accepted app tester. Published apps can receive eligible public activity after the required permissions are approved.
             </div>
             <p className="text-xs leading-relaxed text-slate-500">This page refreshes post status and tracked comment totals every 10 seconds. For raw webhook diagnostics, use the backend container logs.</p>
           </div>

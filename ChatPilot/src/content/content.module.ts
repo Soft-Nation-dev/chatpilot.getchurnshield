@@ -12,6 +12,7 @@ import { ContentGeneratorService } from './services/content-generator.service'
 import { ContentPublisherService } from './services/content-publisher.service'
 import { ContentSchedulerService } from './services/content-scheduler.service'
 import { ContentProcessor } from './processors/content.processor'
+import { ContentAutomationService } from './services/content-automation.service'
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ContentProcessor } from './processors/content.processor'
     ContentPublisherService,
     ContentSchedulerService,
     ContentProcessor,
+    ContentAutomationService,
   ],
   exports: [ContentGeneratorService, ContentPublisherService],
 })

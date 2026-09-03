@@ -40,6 +40,7 @@ model companies {
   social_accounts            social_accounts[]
   properties                 properties[]
   content_posts              content_posts[]
+  content_automation_settings content_automation_settings?
 }
 
 model users {
@@ -358,6 +359,23 @@ model whats_app_session {
   updatedAt DateTime @updatedAt
 
   @@index([sessionId], map: "idx_whats_app_session_sessionId")
+}
+
+model content_automation_settings {
+  id                Int       @id @default(autoincrement())
+  company_id        Int       @unique
+  enabled           Boolean   @default(false)
+  posts_per_day     Int       @default(2)
+  posting_times     Json?
+  posting_days      Json?
+  platforms         String    @default("facebook,instagram") @db.VarChar(60)
+  approval_required Boolean   @default(true)
+  property_ratio    Int       @default(100)
+  min_reuse_days    Int       @default(14)
+  timezone          String    @default("Africa/Lagos") @db.VarChar(60)
+  created_at        DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime? @updatedAt @db.Timestamptz(6)
+  company           companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
 }
 
 model wb_messages_cache {

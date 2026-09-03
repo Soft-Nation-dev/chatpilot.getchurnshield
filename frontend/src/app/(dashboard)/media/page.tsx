@@ -87,12 +87,12 @@ export default function MediaLibraryPage() {
         headers: authHeaders(),
         body: form,
       })
-      if (!response.ok) throw new Error(await responseMessage(response, 'Could not upload the image.'))
+      if (!response.ok) throw new Error(await responseMessage(response, 'Could not upload the media file.'))
       const body = await response.json() as { item: MediaItem }
       setItems(current => [body.item, ...current.filter(item => item.key !== body.item.key)])
-      setNotice('Image uploaded. Copy its link or send it directly to the content composer.')
+      setNotice('Media uploaded. Attach it to a property or use an image in the content composer.')
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not upload the image.')
+      setError(cause instanceof Error ? cause.message : 'Could not upload the media file.')
     } finally {
       setUploading(false)
       if (inputRef.current) inputRef.current.value = ''
@@ -148,7 +148,7 @@ export default function MediaLibraryPage() {
           </div>
           <div>
             <h2 className="text-2xl font-bold text-foreground">Media Library</h2>
-            <p className="mt-0.5 text-sm text-muted-foreground">Upload images once and get a public URL that Instagram and Facebook can open.</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">Store reusable property images and short video tours in Cloudflare R2.</p>
           </div>
         </div>
         <Button variant="outline" onClick={load} disabled={loading}>
@@ -161,10 +161,10 @@ export default function MediaLibraryPage() {
         <h3 className="font-semibold text-slate-900">How to use an image in a social post</h3>
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           {[
-            ['1', 'Upload a JPEG, PNG, or WebP image below. JPEG is recommended for Instagram.'],
-            ['2', 'Wait for the image card and its public HTTPS link to appear.'],
-            ['3', 'Click “Use in content” to place the link into a new draft automatically.'],
-            ['4', 'Generate the draft, review it, then publish when you are ready.'],
+            ['1', 'Upload a JPEG, PNG, WebP, MP4, or MOV file below.'],
+            ['2', 'Add it to a Property Vault record with verified facts and pricing.'],
+            ['3', 'Let automation select an available property and prepare a draft.'],
+            ['4', 'Review and approve the draft before its scheduled publishing time.'],
           ].map(([number, text]) => (
             <div key={number} className="rounded-xl border border-white/80 bg-white/80 p-4">
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">{number}</span>
@@ -175,7 +175,7 @@ export default function MediaLibraryPage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm lg:p-6">
-        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleFile} className="sr-only" />
+        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" onChange={handleFile} className="sr-only" />
         <div
           onDragEnter={event => { event.preventDefault(); setDragging(true) }}
           onDragOver={event => event.preventDefault()}
@@ -184,8 +184,8 @@ export default function MediaLibraryPage() {
           className={`flex min-h-48 flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-colors ${dragging ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 bg-slate-50/60'}`}
         >
           {uploading ? <Loader2 className="h-9 w-9 animate-spin text-emerald-600" /> : <UploadCloud className="h-9 w-9 text-emerald-600" />}
-          <h3 className="mt-4 font-semibold text-slate-900">{uploading ? 'Uploading your image…' : 'Drop an image here'}</h3>
-          <p className="mt-1 text-sm text-slate-500">JPEG, PNG, or WebP · maximum 10 MB</p>
+          <h3 className="mt-4 font-semibold text-slate-900">{uploading ? 'Uploading your media…' : 'Drop an image or video here'}</h3>
+          <p className="mt-1 text-sm text-slate-500">Images up to 10 MB · MP4/MOV video up to 50 MB</p>
           <Button className="mt-5" type="button" onClick={() => inputRef.current?.click()} disabled={uploading}>
             {uploading ? 'Please wait' : 'Choose image'}
           </Button>
@@ -202,7 +202,7 @@ export default function MediaLibraryPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h3 className="font-semibold text-slate-900">Your uploaded images</h3>
-            <p className="mt-1 text-sm text-slate-500">Each link is public so Meta can fetch the image while publishing.</p>
+            <p className="mt-1 text-sm text-slate-500">Each link is public so Meta can fetch approved media while publishing.</p>
           </div>
           <Link href="/content" className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:text-emerald-800">
             Open content composer <ExternalLink className="h-3.5 w-3.5" />
@@ -216,8 +216,12 @@ export default function MediaLibraryPage() {
             {items.map(item => (
               <article key={item.key} className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm">
                 <a href={item.url} target="_blank" rel="noreferrer" className="block aspect-[4/3] overflow-hidden bg-slate-100">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={item.url} alt={item.name} className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]" />
+                  {item.contentType.startsWith('video/') ? (
+                    <video src={item.url} muted controls preload="metadata" className="h-full w-full object-cover" />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.url} alt={item.name} className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.02]" />
+                  )}
                 </a>
                 <div className="space-y-4 p-4">
                   <div>
@@ -230,7 +234,11 @@ export default function MediaLibraryPage() {
                       {copiedKey === item.key ? <Check className="mr-2 h-4 w-4 text-emerald-600" /> : <Clipboard className="mr-2 h-4 w-4" />}
                       {copiedKey === item.key ? 'Copied' : 'Copy link'}
                     </Button>
-                    <Link href={`/content?image=${encodeURIComponent(item.url)}`} className={buttonVariants({ size: 'sm' })}><Send className="mr-2 h-4 w-4" />Use in content</Link>
+                    {item.contentType.startsWith('video/') ? (
+                      <Link href="/properties" className={buttonVariants({ size: 'sm' })}><Send className="mr-2 h-4 w-4" />Property Vault</Link>
+                    ) : (
+                      <Link href={`/content?image=${encodeURIComponent(item.url)}`} className={buttonVariants({ size: 'sm' })}><Send className="mr-2 h-4 w-4" />Use in content</Link>
+                    )}
                   </div>
                   <div className="flex justify-between border-t border-slate-100 pt-3">
                     <a href={item.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700">Open image <ExternalLink className="h-3 w-3" /></a>
@@ -245,8 +253,8 @@ export default function MediaLibraryPage() {
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
             <ImageIcon className="mx-auto h-8 w-8 text-slate-300" />
-            <h4 className="mt-4 font-semibold text-slate-800">No uploaded images yet</h4>
-            <p className="mt-1 text-sm text-slate-500">Upload your first image above and its reusable public link will appear here.</p>
+            <h4 className="mt-4 font-semibold text-slate-800">No uploaded media yet</h4>
+            <p className="mt-1 text-sm text-slate-500">Upload the first property image or video and its reusable public link will appear here.</p>
           </div>
         )}
       </section>

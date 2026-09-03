@@ -8,10 +8,13 @@ import {
 } from '@/lib/server/media'
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024
 const SUPPORTED_TYPES = new Map([
   ['image/jpeg', 'jpg'],
   ['image/png', 'png'],
   ['image/webp', 'webp'],
+  ['video/mp4', 'mp4'],
+  ['video/quicktime', 'mov'],
 ])
 
 function safeName(name: string) {
@@ -57,13 +60,19 @@ export async function POST(request: NextRequest) {
     const file = form.get('file')
 
     if (!(file instanceof File)) {
-      return Response.json({ message: 'Choose an image to upload.' }, { status: 400 })
+      return Response.json({ message: 'Choose an image or video to upload.' }, { status: 400 })
     }
     if (!SUPPORTED_TYPES.has(file.type)) {
-      return Response.json({ message: 'Upload a JPEG, PNG, or WebP image.' }, { status: 415 })
+      return Response.json({ message: 'Upload a JPEG, PNG, WebP, MP4, or MOV file.' }, { status: 415 })
     }
-    if (file.size < 1 || file.size > MAX_IMAGE_BYTES) {
-      return Response.json({ message: 'The image must be smaller than 10 MB.' }, { status: 413 })
+    const isVideo = file.type.startsWith('video/')
+    const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES
+    if (file.size < 1 || file.size > maxBytes) {
+      return Response.json({
+        message: isVideo
+          ? 'The video must be smaller than 50 MB.'
+          : 'The image must be smaller than 10 MB.',
+      }, { status: 413 })
     }
 
     const extension = SUPPORTED_TYPES.get(file.type)!

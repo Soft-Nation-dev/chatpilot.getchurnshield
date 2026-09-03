@@ -19,11 +19,13 @@ import { PrismaService } from 'src/prisma/prisma.service'
 import { PropertyService } from './services/property.service'
 import { ContentGeneratorService } from './services/content-generator.service'
 import { ContentPublisherService } from './services/content-publisher.service'
+import { ContentAutomationService } from './services/content-automation.service'
 import { UpsertPropertyDto } from './dto/property.dto'
 import {
   GenerateBatchDto,
   GenerateContentDto,
   UpdateContentPostDto,
+  UpdateContentAutomationDto,
 } from './dto/content.dto'
 
 @ApiTags('Content')
@@ -37,7 +39,39 @@ export class ContentController {
     private readonly propertyService: PropertyService,
     private readonly generator: ContentGeneratorService,
     private readonly publisher: ContentPublisherService,
+    private readonly automation: ContentAutomationService,
   ) {}
+
+  @ApiOperation({ summary: 'Get automatic content planning settings' })
+  @Get('content-automation')
+  async getContentAutomation(
+    @Request() req: any,
+    @Param('companyId', ParseIntPipe) companyId: number,
+  ) {
+    await this.companyAccess.assertAccess(req.user, companyId)
+    return this.automation.getSettings(companyId)
+  }
+
+  @ApiOperation({ summary: 'Update automatic content planning settings' })
+  @Put('content-automation')
+  async updateContentAutomation(
+    @Request() req: any,
+    @Param('companyId', ParseIntPipe) companyId: number,
+    @Body() dto: UpdateContentAutomationDto,
+  ) {
+    await this.companyAccess.assertAccess(req.user, companyId)
+    return this.automation.updateSettings(companyId, dto)
+  }
+
+  @ApiOperation({ summary: 'Generate the next automatic content plan now' })
+  @Post('content-automation/run-now')
+  async runContentAutomation(
+    @Request() req: any,
+    @Param('companyId', ParseIntPipe) companyId: number,
+  ) {
+    await this.companyAccess.assertAccess(req.user, companyId)
+    return this.automation.planCompany(companyId, true)
+  }
 
   @ApiOperation({ summary: 'List properties' })
   @Get('properties')
