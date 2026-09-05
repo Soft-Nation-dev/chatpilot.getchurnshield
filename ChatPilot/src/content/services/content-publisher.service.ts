@@ -23,7 +23,6 @@ export class ContentPublisherService {
     })
 
     if (!post) return 'not_found'
-    if (post.status === 'published') return 'already_published'
 
     if (!PUBLISH_ENABLED) {
       await this.fail(postId, 'publishing disabled by configuration')
@@ -44,14 +43,24 @@ export class ContentPublisherService {
       .map(p => p.trim())
       .filter(Boolean)
 
+    const wantsFacebook = platforms.includes(SOCIAL_PLATFORM.FACEBOOK)
+    const wantsInstagram = platforms.includes(SOCIAL_PLATFORM.INSTAGRAM)
+    const alreadyComplete =
+      (!wantsFacebook || Boolean(post.fb_post_id)) &&
+      (!wantsInstagram || Boolean(post.ig_post_id))
+
+    if (post.status === 'published' && alreadyComplete) {
+      return 'already_published'
+    }
+
     const message = [post.caption, post.hashtags].filter(Boolean).join('\n\n')
     const imageUrl = this.firstImage(post.image_urls)
 
     const errors: string[] = []
-    let fbPostId: string | null = null
-    let igPostId: string | null = null
+    let fbPostId: string | null = post.fb_post_id
+    let igPostId: string | null = post.ig_post_id
 
-    if (platforms.includes(SOCIAL_PLATFORM.FACEBOOK)) {
+    if (wantsFacebook && !fbPostId) {
       const account = accounts.find(
         a => a.platform === SOCIAL_PLATFORM.FACEBOOK,
       )
@@ -73,10 +82,12 @@ export class ContentPublisherService {
             )
           }
         }
+      } else {
+        errors.push('facebook: no connected account')
       }
     }
 
-    if (platforms.includes(SOCIAL_PLATFORM.INSTAGRAM)) {
+    if (wantsInstagram && !igPostId) {
       const account = accounts.find(
         a => a.platform === SOCIAL_PLATFORM.INSTAGRAM,
       )
@@ -102,6 +113,8 @@ export class ContentPublisherService {
             }
           }
         }
+      } else {
+        errors.push('instagram: no connected account')
       }
     }
 
@@ -114,7 +127,7 @@ export class ContentPublisherService {
       where: { id: postId },
       data: {
         status: 'published',
-        published_at: new Date(),
+        published_at: post.published_at ?? new Date(),
         fb_post_id: fbPostId,
         ig_post_id: igPostId,
         error: errors.length ? errors.join(' | ') : null,
@@ -125,7 +138,11 @@ export class ContentPublisherService {
       `Published content post ${postId} (fb=${fbPostId ?? '-'} ig=${igPostId ?? '-'})`,
     )
 
-    return 'published'
+    const completedAllRequestedPlatforms =
+      (!wantsFacebook || Boolean(fbPostId)) &&
+      (!wantsInstagram || Boolean(igPostId))
+
+    return completedAllRequestedPlatforms ? 'published' : 'partially_published'
   }
 
   async publishDue(): Promise<number> {

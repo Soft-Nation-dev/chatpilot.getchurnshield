@@ -136,6 +136,12 @@ function ContentCard({
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
+  const hasMissingPlatform =
+    (facebook && !post.fb_post_id) || (instagram && !post.ig_post_id)
+  const canPublish =
+    post.status !== 'rejected' &&
+    (post.status !== 'published' || hasMissingPlatform)
+
   const payload = () => ({
     caption: caption.trim(),
     hashtags: hashtags.trim(),
@@ -182,6 +188,12 @@ function ContentCard({
       await save()
       const response = await api.post(`/companies/${companyId}/content/${post.id}/publish`)
       const action = response.data?.action
+      if (action === 'partially_published') {
+        setError('One platform published, but another platform failed. See the platform error below, then retry the failed platform.')
+        await onChanged()
+        setExpanded(true)
+        return
+      }
       if (action !== 'published' && action !== 'already_published') {
         throw new Error(`Publishing did not complete: ${String(action || 'unknown result').replaceAll('_', ' ')}`)
       }
@@ -343,10 +355,10 @@ function ContentCard({
                   <CalendarClock className="mr-2 h-4 w-4" />Approve & schedule
                 </Button>
               )}
-              {post.status !== 'published' && post.status !== 'rejected' && (
+              {canPublish && (
                 <Button onClick={handlePublish} disabled={busy !== null}>
                   {busy === 'publish' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                  Publish now
+                  {post.status === 'published' ? 'Retry failed platform' : 'Publish now'}
                 </Button>
               )}
             </div>

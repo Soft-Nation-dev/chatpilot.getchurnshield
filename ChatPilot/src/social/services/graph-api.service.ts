@@ -9,6 +9,9 @@ export type GraphResult = {
   data: any
 }
 
+const INSTAGRAM_CONTAINER_POLL_ATTEMPTS = 15
+const INSTAGRAM_CONTAINER_POLL_INTERVAL_MS = 2000
+
 @Injectable()
 export class GraphApiService {
   private readonly logger = new Logger(GraphApiService.name)
@@ -19,7 +22,12 @@ export class GraphApiService {
         params,
         timeout: 20000,
       })
-      return { success: true, error: null, isAuthError: false, data: response.data }
+      return {
+        success: true,
+        error: null,
+        isAuthError: false,
+        data: response.data,
+      }
     } catch (error) {
       return this.toError(error)
     }
@@ -36,22 +44,29 @@ export class GraphApiService {
         { ...body, access_token: accessToken },
         { timeout: 20000 },
       )
-      return { success: true, error: null, isAuthError: false, data: response.data }
+      return {
+        success: true,
+        error: null,
+        isAuthError: false,
+        data: response.data,
+      }
     } catch (error) {
       return this.toError(error)
     }
   }
 
-  async del(
-    path: string,
-    accessToken: string,
-  ): Promise<GraphResult> {
+  async del(path: string, accessToken: string): Promise<GraphResult> {
     try {
       const response = await axios.delete(`${graphBaseUrl}/${path}`, {
         params: { access_token: accessToken },
         timeout: 20000,
       })
-      return { success: true, error: null, isAuthError: false, data: response.data }
+      return {
+        success: true,
+        error: null,
+        isAuthError: false,
+        data: response.data,
+      }
     } catch (error) {
       return this.toError(error)
     }
@@ -129,7 +144,11 @@ export class GraphApiService {
     accessToken: string,
   ) {
     return imageUrl
-      ? this.post(`${pageId}/photos`, { url: imageUrl, caption: message }, accessToken)
+      ? this.post(
+          `${pageId}/photos`,
+          { url: imageUrl, caption: message },
+          accessToken,
+        )
       : this.post(`${pageId}/feed`, { message }, accessToken)
   }
 
@@ -147,11 +166,63 @@ export class GraphApiService {
 
     if (!container.success || !container.data?.id) return container
 
+    const ready = await this.waitForInstagramContainer(
+      container.data.id,
+      accessToken,
+    )
+    if (!ready.success) return ready
+
     return this.post(
       `${igUserId}/media_publish`,
       { creation_id: container.data.id },
       accessToken,
     )
+  }
+
+  private async waitForInstagramContainer(
+    containerId: string,
+    accessToken: string,
+  ): Promise<GraphResult> {
+    let lastStatus = 'UNKNOWN'
+
+    for (
+      let attempt = 0;
+      attempt < INSTAGRAM_CONTAINER_POLL_ATTEMPTS;
+      attempt++
+    ) {
+      const result = await this.get(containerId, {
+        fields: 'status_code',
+        access_token: accessToken,
+      })
+      if (!result.success) return result
+
+      lastStatus = String(result.data?.status_code || 'UNKNOWN').toUpperCase()
+      if (lastStatus === 'FINISHED') return result
+
+      if (lastStatus === 'ERROR' || lastStatus === 'EXPIRED') {
+        return {
+          success: false,
+          error: `instagram media container ${containerId} entered ${lastStatus} status`,
+          isAuthError: false,
+          data: result.data,
+        }
+      }
+
+      if (attempt < INSTAGRAM_CONTAINER_POLL_ATTEMPTS - 1) {
+        await this.wait(INSTAGRAM_CONTAINER_POLL_INTERVAL_MS)
+      }
+    }
+
+    return {
+      success: false,
+      error: `instagram media container ${containerId} was not ready after ${INSTAGRAM_CONTAINER_POLL_ATTEMPTS} checks (last status: ${lastStatus})`,
+      isAuthError: false,
+      data: { id: containerId, status_code: lastStatus },
+    }
+  }
+
+  private wait(milliseconds: number) {
+    return new Promise(resolve => setTimeout(resolve, milliseconds))
   }
 
   subscribePage(pageId: string, accessToken: string) {
@@ -186,8 +257,7 @@ export class GraphApiService {
 
   listPages(userAccessToken: string) {
     return this.get('me/accounts', {
-      fields:
-        'id,name,access_token,instagram_business_account{id,username}',
+      fields: 'id,name,access_token,instagram_business_account{id,username}',
       access_token: userAccessToken,
     })
   }
@@ -196,7 +266,8 @@ export class GraphApiService {
     const graphError = error?.response?.data?.error
     const code = graphError?.code
     const subcode = graphError?.error_subcode
-    const isAuthError = code === 190 || code === 102 || subcode === 458 || subcode === 463
+    const isAuthError =
+      code === 190 || code === 102 || subcode === 458 || subcode === 463
 
     const message = graphError
       ? JSON.stringify(graphError)
