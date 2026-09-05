@@ -45,8 +45,9 @@ export class SocialOauthService {
       client_id: socialConfig.appId,
       redirect_uri: socialConfig.oauthRedirectUri,
       response_type: 'code',
+      override_default_response_type: 'true',
       state,
-      scope: SCOPES,
+      config_id: socialConfig.loginConfigId,
     })
 
     return `https://www.facebook.com/${socialConfig.graphVersion}/dialog/oauth?${params.toString()}`
@@ -138,9 +139,12 @@ export class SocialOauthService {
     if (
       !socialConfig.appId ||
       !socialConfig.appSecret ||
-      !socialConfig.oauthRedirectUri
+      !socialConfig.oauthRedirectUri ||
+      !socialConfig.loginConfigId
     ) {
-      throw new BadRequestException('meta not configured')
+      throw new BadRequestException(
+        'meta not configured: Facebook Login for Business configuration is required',
+      )
     }
   }
 
