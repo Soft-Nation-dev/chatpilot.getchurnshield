@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ArrowRight,
   BedDouble,
   Building2,
   Check,
@@ -26,6 +27,14 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 type Property = {
   id: number
@@ -66,6 +75,16 @@ type FormState = {
   features: string
   image_urls: string[]
   video_url: string
+  status: string
+}
+
+type GeneratedDraft = {
+  id: number
+  kind: string
+  caption: string
+  hashtags: string | null
+  image_urls: string | null
+  platforms: string | null
   status: string
 }
 
@@ -135,6 +154,7 @@ export default function PropertyVaultPage() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [generatingId, setGeneratingId] = useState<number | null>(null)
+  const [generatedDraft, setGeneratedDraft] = useState<GeneratedDraft | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
@@ -253,13 +273,15 @@ export default function PropertyVaultPage() {
     setError('')
     try {
       const platforms = images(property.image_urls).length ? 'facebook,instagram' : 'facebook'
-      await api.post(`/companies/${companyId}/content/generate`, {
+      const response = await api.post(`/companies/${companyId}/content/generate`, {
         kind: 'showcase',
         property_id: property.id,
         platforms,
         auto_approve: false,
       })
-      setNotice(`Draft created from “${property.title}”. Open Content Approval to review it.`)
+      const created = response.data as GeneratedDraft
+      setGeneratedDraft(created)
+      setNotice(`Draft created from “${property.title}”.`)
     } catch (cause) {
       setError(getErrorMessage(cause, 'Could not generate a draft from this property.'))
     } finally {
@@ -269,6 +291,82 @@ export default function PropertyVaultPage() {
 
   return (
     <div className="space-y-7">
+      <Dialog
+        open={generatedDraft !== null}
+        onOpenChange={open => {
+          if (!open) setGeneratedDraft(null)
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto p-0">
+          {generatedDraft && (
+            <>
+              <div className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50 via-white to-blue-50 px-6 py-5">
+                <DialogHeader>
+                  <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <DialogTitle>Your content draft is ready</DialogTitle>
+                  <DialogDescription>
+                    Review the generated post now, or continue to Content Approval to edit, schedule, or publish it.
+                  </DialogDescription>
+                </DialogHeader>
+              </div>
+
+              <div className="space-y-5 px-6 pb-6">
+                {images(generatedDraft.image_urls)[0] && (
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                    <img
+                      src={images(generatedDraft.image_urls)[0]}
+                      alt="Generated property post preview"
+                      className="max-h-64 w-full object-cover"
+                    />
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">
+                    Draft
+                  </Badge>
+                  {(generatedDraft.platforms || 'facebook')
+                    .split(',')
+                    .map(platform => platform.trim())
+                    .filter(Boolean)
+                    .map(platform => (
+                      <Badge key={platform} variant="outline" className="capitalize">
+                        {platform}
+                      </Badge>
+                    ))}
+                </div>
+
+                <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="whitespace-pre-line text-sm leading-6 text-slate-700">
+                    {generatedDraft.caption}
+                  </p>
+                  {generatedDraft.hashtags && (
+                    <p className="mt-4 text-sm font-medium leading-6 text-emerald-700">
+                      {generatedDraft.hashtags}
+                    </p>
+                  )}
+                </div>
+
+                <DialogFooter className="gap-2 sm:space-x-0">
+                  <Button type="button" variant="outline" onClick={() => setGeneratedDraft(null)}>
+                    Stay in Property Vault
+                  </Button>
+                  <Link
+                    href={`/content?draft=${generatedDraft.id}`}
+                    className={buttonVariants()}
+                  >
+                    Review and approve
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </DialogFooter>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700"><Building2 className="h-5 w-5" /></div>

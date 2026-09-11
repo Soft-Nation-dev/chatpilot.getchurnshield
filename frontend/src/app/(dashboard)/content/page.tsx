@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   CheckCircle2,
@@ -119,10 +119,12 @@ function ContentCard({
   post,
   companyId,
   onChanged,
+  focused = false,
 }: {
   post: ContentPost
   companyId: number
   onChanged: (message?: string) => Promise<void>
+  focused?: boolean
 }) {
   const initialPlatforms = splitPlatforms(post.platforms)
   const [caption, setCaption] = useState(post.caption)
@@ -263,7 +265,15 @@ function ContentCard({
     .format(new Date(post.published_at || post.created_at))
 
   return (
-    <motion.article layout className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm">
+    <motion.article
+      id={`content-post-${post.id}`}
+      layout
+      className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition-all ${
+        focused
+          ? 'border-emerald-400 ring-4 ring-emerald-100'
+          : 'border-slate-200/70'
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -376,6 +386,7 @@ function ContentCard({
 export default function ContentPage() {
   const { user } = useAuth()
   const companyId = user?.company_id
+  const focusedDraftHandled = useRef(false)
   const [posts, setPosts] = useState<ContentPost[]>([])
   const [accounts, setAccounts] = useState<SocialAccount[]>([])
   const [loading, setLoading] = useState(true)
@@ -390,6 +401,7 @@ export default function ContentPage() {
   const [generationError, setGenerationError] = useState('')
   const [notice, setNotice] = useState('')
   const [platformDefaultsApplied, setPlatformDefaultsApplied] = useState(false)
+  const [focusedPostId, setFocusedPostId] = useState<number | null>(null)
 
   const loadData = useCallback(async (quiet = false) => {
     if (!companyId) return
@@ -411,12 +423,31 @@ export default function ContentPage() {
 
   useEffect(() => { loadData() }, [loadData])
   useEffect(() => {
-    const selectedImage = new URLSearchParams(window.location.search).get('image')
+    const params = new URLSearchParams(window.location.search)
+    const selectedImage = params.get('image')
     if (selectedImage?.startsWith('https://')) {
       setImageUrl(selectedImage)
       setNotice('Image selected from Media Library. Choose Instagram and generate your draft.')
     }
+    const selectedDraft = Number(params.get('draft'))
+    if (Number.isInteger(selectedDraft) && selectedDraft > 0) {
+      setFocusedPostId(selectedDraft)
+      setNotice('Generated draft opened below. Review, edit, schedule, or publish it when ready.')
+    }
   }, [])
+  useEffect(() => {
+    if (!focusedPostId || focusedDraftHandled.current) return
+    if (!posts.some(post => post.id === focusedPostId)) return
+
+    focusedDraftHandled.current = true
+    const timer = window.setTimeout(() => {
+      document
+        .getElementById(`content-post-${focusedPostId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 100)
+
+    return () => window.clearTimeout(timer)
+  }, [focusedPostId, posts])
   useEffect(() => {
     const interval = window.setInterval(() => loadData(true), 10000)
     return () => window.clearInterval(interval)
@@ -630,7 +661,7 @@ export default function ContentPage() {
         {loading ? (
           <div className="flex min-h-40 items-center justify-center rounded-2xl border border-slate-200 bg-white"><Loader2 className="h-6 w-6 animate-spin text-emerald-600" /></div>
         ) : posts.length ? (
-          <div className="space-y-4">{posts.map(post => <ContentCard key={post.id} post={post} companyId={companyId!} onChanged={changed} />)}</div>
+          <div className="space-y-4">{posts.map(post => <ContentCard key={post.id} post={post} companyId={companyId!} onChanged={changed} focused={post.id === focusedPostId} />)}</div>
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center"><Sparkles className="mx-auto h-8 w-8 text-slate-300" /><h4 className="mt-4 font-semibold text-slate-800">No content yet</h4><p className="mt-1 text-sm text-slate-500">Generate your first draft above.</p></div>
         )}
