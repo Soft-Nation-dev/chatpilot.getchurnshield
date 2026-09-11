@@ -106,13 +106,13 @@ export class GraphApiService {
   }
 
   sendInstagramMessage(
-    igUserId: string,
+    pageId: string,
     recipientId: string,
     text: string,
     accessToken: string,
   ) {
     return this.post(
-      `${igUserId}/messages`,
+      `${pageId}/messages`,
       {
         recipient: { id: recipientId },
         message: { text },

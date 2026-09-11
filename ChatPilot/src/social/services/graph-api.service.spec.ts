@@ -15,6 +15,31 @@ describe('GraphApiService', () => {
     jest.spyOn(service as any, 'wait').mockResolvedValue(undefined)
   })
 
+  describe('sendInstagramMessage', () => {
+    it('uses the linked Facebook Page endpoint for Facebook Login messaging', async () => {
+      const post = jest
+        .spyOn(service, 'post')
+        .mockResolvedValue(success({ message_id: 'message-1' }))
+
+      const result = await service.sendInstagramMessage(
+        'page-1',
+        'instagram-scoped-recipient-1',
+        'Hello from ChatPilot',
+        'page-token',
+      )
+
+      expect(result).toEqual(success({ message_id: 'message-1' }))
+      expect(post).toHaveBeenCalledWith(
+        'page-1/messages',
+        {
+          recipient: { id: 'instagram-scoped-recipient-1' },
+          message: { text: 'Hello from ChatPilot' },
+        },
+        'page-token',
+      )
+    })
+  })
+
   describe('publishInstagramPost', () => {
     it('waits for the media container before publishing it', async () => {
       const post = jest

@@ -129,6 +129,8 @@ export class SocialReplyService {
       })
     }
 
+    await this.socialAccountService.clearError(account.id)
+
     return this.finish(eventId, SOCIAL_ACTION.REPLIED, {
       intent: verdict.intent,
       intent_score: verdict.score,
@@ -141,14 +143,27 @@ export class SocialReplyService {
   }
 
   private dispatch(
-    event: { event_type: string; platform: string; external_id: string; external_user_id: string | null },
-    account: { external_id: string; page_id: string | null; ig_user_id: string | null },
+    event: {
+      event_type: string
+      platform: string
+      external_id: string
+      external_user_id: string | null
+    },
+    account: {
+      external_id: string
+      page_id: string | null
+      ig_user_id: string | null
+    },
     replyText: string,
     token: string,
   ) {
     if (event.event_type === SOCIAL_EVENT_TYPE.COMMENT) {
       return event.platform === SOCIAL_PLATFORM.INSTAGRAM
-        ? this.graph.replyToInstagramComment(event.external_id, replyText, token)
+        ? this.graph.replyToInstagramComment(
+            event.external_id,
+            replyText,
+            token,
+          )
         : this.graph.replyToFacebookComment(event.external_id, replyText, token)
     }
 
@@ -156,7 +171,7 @@ export class SocialReplyService {
 
     if (event.platform === SOCIAL_PLATFORM.INSTAGRAM) {
       return this.graph.sendInstagramMessage(
-        account.ig_user_id || account.external_id,
+        account.page_id || account.external_id,
         recipientId,
         replyText,
         token,

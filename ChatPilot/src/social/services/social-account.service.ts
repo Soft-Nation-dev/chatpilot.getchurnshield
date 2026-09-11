@@ -122,4 +122,15 @@ export class SocialAccountService {
       this.logger.error('Failed to record account error', error?.message)
     }
   }
+
+  async clearError(id: number) {
+    try {
+      await this.prisma.social_accounts.update({
+        where: { id },
+        data: { last_error: null },
+      })
+    } catch (error) {
+      this.logger.error('Failed to clear account error', error?.message)
+    }
+  }
 }
