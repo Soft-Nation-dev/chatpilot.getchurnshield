@@ -14,7 +14,7 @@ import {
 } from '../constants/builtin-prompt'
 import { REAL_ESTATE_KNOWLEDGE } from '../constants/real-estate-prompt'
 
-const DEFAULT_MODEL: GeminiModelKey = 'gemini-2.5-flash'
+const DEFAULT_MODEL: GeminiModelKey = 'gemini-3.6-flash'
 
 type AssistantConfig = {
   systemPrompt: string

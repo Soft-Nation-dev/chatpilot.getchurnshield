@@ -9,4 +9,7 @@ export class WbConnectionUpdateDto {
 
   @ApiProperty({ description: 'Status message with details', required: false })
   message?: string
+
+  @ApiProperty({ description: 'Connected WhatsApp phone number', required: false })
+  phoneNumber?: string
 }

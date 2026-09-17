@@ -9,7 +9,7 @@ import {
   CONVERSATION_LEARNING_PROMPT,
 } from '../constants/learning-prompt'
 
-const LEARNING_MODEL = process.env.LEARNING_MODEL || 'gemini-2.5-flash'
+const LEARNING_MODEL = process.env.LEARNING_MODEL || 'gemini-3.6-flash'
 const MIN_SAMPLE = Number(process.env.LEARNING_MIN_SAMPLE || 6)
 const LOOKBACK_DAYS = Number(process.env.LEARNING_LOOKBACK_DAYS || 30)
 const MAX_CONVERSATIONS = 12

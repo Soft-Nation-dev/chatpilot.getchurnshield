@@ -541,4 +541,11 @@ export class ContactService {
   async markUnread(_contact: Contact) {
     // markUnread not supported in WhatsApp Bailey
   }
+
+  async markOutgoingMessageRead(wbId: string) {
+    return this.prisma.messages.updateMany({
+      where: { wb_id: wbId },
+      data: { is_read: true },
+    })
+  }
 }

@@ -1,5 +1,6 @@
 export const CONTENT_KINDS = [
   'showcase',
+  'profile',
   'educational',
   'tip',
   'faq',
@@ -35,6 +36,8 @@ Respond with STRICT JSON only. No markdown fences, no commentary:
 export const KIND_BRIEFS: Record<string, string> = {
   showcase:
     'Write a property showcase. Lead with the single most compelling detail (the location, the title document, or the payment plan). Describe what life there is actually like, not just a list of specs. Close by inviting a comment for the price and full details.',
+  profile:
+    'Write a brand-building post using the agency profile below. Help a prospective buyer understand what the agency does, who it serves, or why its approach is useful. Do not invent achievements, locations, services, years of experience, or guarantees. Close with a natural invitation to ask a question.',
   educational:
     'Write an educational post that teaches buyers something genuinely useful about buying property in Nigeria — how a title document actually protects them, what to check before paying, how allocation works. Do NOT pitch a property. Teach first. Close by inviting questions in the comments.',
   tip:
@@ -88,12 +91,21 @@ export function buildContentUserPrompt(input: {
   } | null
   topic?: string | null
   learned?: string | null
+  businessProfile?: string | null
 }): string {
   const brief = KIND_BRIEFS[input.kind] ?? KIND_BRIEFS.educational
   const lines: string[] = [`Agency: ${input.companyName}`, '', `Brief: ${brief}`]
 
   if (input.topic) {
     lines.push('', `Topic: ${input.topic}`)
+  }
+
+  if (input.businessProfile) {
+    lines.push(
+      '',
+      'Agency profile — use only these supplied facts when describing the business:',
+      input.businessProfile,
+    )
   }
 
   if (input.property) {

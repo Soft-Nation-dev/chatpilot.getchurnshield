@@ -40,4 +40,26 @@ describe('SocialReplyService', () => {
       'page-token',
     )
   })
+
+  it('never puts a WhatsApp link in an Instagram public comment fallback', () => {
+    const service = new SocialReplyService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    )
+
+    const reply = (service as any).fallbackReply({
+      eventType: SOCIAL_EVENT_TYPE.COMMENT,
+      platform: SOCIAL_PLATFORM.INSTAGRAM,
+      eventId: 2,
+      authorName: 'Ada Okafor',
+      waLink: 'https://wa.me/2348000000000',
+    })
+
+    expect(reply).toContain('Send us a DM')
+    expect(reply).not.toContain('http')
+    expect(reply).not.toContain('wa.me')
+  })
 })

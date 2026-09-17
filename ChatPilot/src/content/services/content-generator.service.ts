@@ -29,7 +29,7 @@ export class ContentGeneratorService {
   ) {
     const company = await this.prisma.companies.findUnique({
       where: { id: companyId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, business_details: true },
     })
     if (!company) throw new NotFoundException('Company not found')
 
@@ -53,6 +53,7 @@ export class ContentGeneratorService {
       property,
       topic,
       learned,
+      businessProfile: this.businessProfile(company.business_details),
     })
 
     return this.prisma.content_posts.create({
@@ -125,6 +126,7 @@ export class ContentGeneratorService {
     property: any
     topic: string | null
     learned: string | null
+    businessProfile: string | null
   }): Promise<{ caption: string; hashtags: string }> {
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) throw new Error('GEMINI_API_KEY is not configured')
@@ -147,6 +149,7 @@ export class ContentGeneratorService {
                 property: input.property,
                 topic: input.topic,
                 learned: input.learned,
+                businessProfile: input.businessProfile,
               }),
             },
           ],
@@ -159,6 +162,14 @@ export class ContentGeneratorService {
       throw new Error('Content generation returned an unparseable response')
     }
     return parsed
+  }
+
+  private businessProfile(value: unknown): string | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const details = value as Record<string, unknown>
+    const description =
+      typeof details.description === 'string' ? details.description.trim() : ''
+    return description || null
   }
 
   private parse(raw: string): { caption: string; hashtags: string } | null {

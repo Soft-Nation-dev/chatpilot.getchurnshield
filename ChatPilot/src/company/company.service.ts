@@ -33,9 +33,26 @@ export class CompanyService {
     private readonly storageService: StorageService,
   ) {}
 
-  async findByPhone(targetPhone: number) {
+  async findByPhone(targetPhone: number | string | bigint) {
+    const digits = String(targetPhone).replace(/\D/g, '')
+    if (!digits) return null
+
+    const candidates = new Set<string>([digits])
+    if (digits.startsWith('234') && digits.length === 13) {
+      candidates.add(digits.slice(3))
+      candidates.add(`0${digits.slice(3)}`)
+    } else if (digits.startsWith('0') && digits.length === 11) {
+      candidates.add(digits.slice(1))
+      candidates.add(`234${digits.slice(1)}`)
+    } else if (digits.length === 10) {
+      candidates.add(`0${digits}`)
+      candidates.add(`234${digits}`)
+    }
+
     return await this.prisma.companies.findFirst({
-      where: { phone: Number(targetPhone) },
+      where: {
+        OR: Array.from(candidates).map(phone => ({ phone: BigInt(phone) })),
+      },
     })
   }
 
@@ -251,7 +268,7 @@ export class CompanyService {
     })
 
     const { text: generatedPrompt } = await generateText({
-      model: google('gemini-2.5-flash'),
+      model: google('gemini-3.6-flash'),
       prompt: `You are an expert at creating WhatsApp business chatbot system prompts. Based on the following business description, generate a comprehensive system prompt for a WhatsApp AI assistant. The prompt should define the bot's personality, knowledge, and behavior.
 
 Business Description:

@@ -140,7 +140,7 @@ export class AiGoogleService {
       })
 
       const { text, usage, providerMetadata, response } = await generateText({
-        model: google('gemini-2.5-flash'),
+        model: google('gemini-3.6-flash'),
         system: systemPrompt,
         tools,
         // messages: chatHistory as any,
@@ -152,7 +152,7 @@ export class AiGoogleService {
         context: 'processPrompt',
         parameters: {
           provider: 'google',
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.6-flash',
           contactId: contact?.id,
           contactPhone: contact?.phone,
           companyId: contact?.companies?.id,
@@ -166,14 +166,14 @@ export class AiGoogleService {
         text,
         usage,
         provider: Object.keys(providerMetadata as any)[0] as ProviderKey,
-        model: 'gemini-2.5-flash' as ModelKey,
+        model: 'gemini-3.6-flash' as ModelKey,
       }
     } catch (error) {
       this.logger.error('process prompt failed', {
         context: 'processPrompt',
         parameters: {
           provider: 'google',
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.6-flash',
           contactId: contact?.id,
           contactPhone: contact?.phone,
           companyId: contact?.companies?.id,

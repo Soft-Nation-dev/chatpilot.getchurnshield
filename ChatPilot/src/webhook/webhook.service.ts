@@ -1,5 +1,5 @@
 // webhook.service.ts
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ContactService } from '../contact/contact.service'
 import { ReplyService } from 'src/background-tasks/services/reply.service'
 import { CompanyService } from 'src/company/company.service'
@@ -34,6 +34,7 @@ export class WebhookService {
   ) {}
 
   private async processWebhook({
+    sessionId,
     message,
     userPhone,
     companyPhone,
@@ -46,6 +47,7 @@ export class WebhookService {
     wbId,
     mediaUrl,
   }: {
+    sessionId?: string
     message: string
     userPhone: bigint | null
     companyPhone: bigint
@@ -57,18 +59,19 @@ export class WebhookService {
     isFromLid?: boolean
     wbId?: string | null
     mediaUrl?: string | null
-  }) {
+  }): Promise<boolean> {
     try {
-      const company = await this.companyService.findByPhone(
-        Number(companyPhone),
-      )
+      const company =
+        (sessionId
+          ? await this.companyService.findBySessionId(sessionId)
+          : null) ?? (await this.companyService.findByPhone(companyPhone))
 
       if (!company) {
         this.logger.log('Company not found', {
           companyPhone,
-          asNumber: Number(companyPhone),
+          sessionId,
         })
-        return
+        return false
       }
 
       const contact = await this.contactService.getOrCreateContact(
@@ -79,7 +82,7 @@ export class WebhookService {
         isFromLid ?? false,
       )
       if (!contact) {
-        return
+        return false
       }
       if (photoUrl) {
         const updateContactPicture = await this.contactService.updateContact(
@@ -151,6 +154,7 @@ export class WebhookService {
           await this.contactService.markUnread(contact)
         }
       }
+      return true
     } catch (error) {
       this.logger.error('Error in processWebhook:', error)
       throw error
@@ -179,7 +183,7 @@ export class WebhookService {
       })
 
       const { text } = await generateText({
-        model: google('gemini-2.5-flash'),
+        model: google('gemini-3.6-flash'),
         messages: [
           {
             role: 'user',
@@ -215,8 +219,12 @@ export class WebhookService {
     }
 
 
+    const connectedPhone = (statusDto.phoneNumber || '').replace(/\D/g, '')
     await this.companyService.updateCompany(company.id, {
       whatsapp_connection_status: statusDto.status,
+      ...(connectedPhone.length >= 7 && connectedPhone.length <= 15
+        ? { wa_inbound_phone: BigInt(connectedPhone) }
+        : {}),
     } as any)
 
     this.logger.log(
@@ -312,6 +320,7 @@ export class WebhookService {
     }
 
     const messageInfo = {
+      sessionId: baileyDto.sessionId,
       message: baileyDto.text,
       userPhone: isFromLid ? null : BigInt(baileyDto.userPhone),
       companyPhone: BigInt(baileyDto.companyPhone),
@@ -329,10 +338,22 @@ export class WebhookService {
       return 'success'
     }
 
-    this.processWebhook(messageInfo).catch(error => {
-      this.logger.error('Error processing webhook:', error)
-    })
+    const accepted = await this.processWebhook(messageInfo)
+    if (!accepted) {
+      throw new ServiceUnavailableException('WhatsApp message was not accepted')
+    }
 
+    return 'success'
+  }
+
+  async updateMessageStatus(body: {
+    id?: string
+    status?: string
+  }): Promise<string> {
+    if (!body.id) return 'message id missing'
+    if (body.status === 'read') {
+      await this.contactService.markOutgoingMessageRead(body.id)
+    }
     return 'success'
   }
 }

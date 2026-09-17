@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { generateText } from 'ai'
 import { PrismaService } from 'src/prisma/prisma.service'
 import { decryptMessage } from 'src/common/crypto/message-crypto'
 import { socialConfig } from '../social.config'
@@ -13,6 +15,7 @@ import { GraphApiService } from './graph-api.service'
 import { IntentClassifierService } from './intent-classifier.service'
 import { SocialAccountService } from './social-account.service'
 import { WaLinkService } from './wa-link.service'
+import { SOCIAL_REPLY_SYSTEM_PROMPT } from '../constants/social-reply-prompt'
 
 @Injectable()
 export class SocialReplyService {
@@ -64,10 +67,15 @@ export class SocialReplyService {
       })
     }
 
-    const refCode = this.waLink.generateRefCode()
-    const waLink = this.waLink.build(company, event.platform, refCode)
+    const isInstagramComment =
+      event.platform === SOCIAL_PLATFORM.INSTAGRAM &&
+      event.event_type === SOCIAL_EVENT_TYPE.COMMENT
+    const refCode = isInstagramComment ? null : this.waLink.generateRefCode()
+    const waLink = refCode
+      ? this.waLink.build(company, event.platform, refCode)
+      : null
 
-    if (!waLink) {
+    if (!isInstagramComment && !waLink) {
       this.logger.error(
         `Company ${company.id} has no usable WhatsApp number for wa.me links`,
       )
@@ -78,12 +86,18 @@ export class SocialReplyService {
       })
     }
 
-    const replyText = this.buildReplyText(
-      event.event_type,
-      event.id,
-      event.external_user_name,
+    const context = await this.replyContext(event.content_post_id)
+    const replyText = await this.buildReplyText({
+      eventType: event.event_type,
+      platform: event.platform,
+      eventId: event.id,
+      authorName: event.external_user_name,
+      message: plainText,
+      companyName: company.name,
+      companyProfile: this.companyProfile(company.business_details),
       waLink,
-    )
+      context,
+    })
 
     if (!socialConfig.replyEnabled || company.social_reply_enabled === false) {
       return this.finish(eventId, SOCIAL_ACTION.SKIPPED_DISABLED, {
@@ -186,19 +200,142 @@ export class SocialReplyService {
     )
   }
 
-  private buildReplyText(
-    eventType: string,
-    eventId: number,
-    authorName: string | null,
-    waLink: string,
-  ): string {
-    const name = (authorName || '').split(' ')[0] || 'there'
-    const template =
-      eventType === SOCIAL_EVENT_TYPE.DM
-        ? DM_REPLY_TEMPLATE
-        : COMMENT_REPLY_TEMPLATES[eventId % COMMENT_REPLY_TEMPLATES.length]
+  private async buildReplyText(input: {
+    eventType: string
+    platform: string
+    eventId: number
+    authorName: string | null
+    message: string
+    companyName: string
+    companyProfile: string | null
+    waLink: string | null
+    context: string | null
+  }): Promise<string> {
+    const fallback = this.fallbackReply(input)
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) return fallback
 
-    return template.replace('{name}', name).replace('{link}', waLink)
+    try {
+      const google = createGoogleGenerativeAI({ apiKey })
+      const { text } = await generateText({
+        model: google(socialConfig.intentModel),
+        system: SOCIAL_REPLY_SYSTEM_PROMPT,
+        temperature: 0.35,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  platform: input.platform,
+                  event_type: input.eventType,
+                  author_first_name:
+                    (input.authorName || '').split(' ')[0] || null,
+                  message: input.message.slice(0, 500),
+                  agency: input.companyName,
+                  agency_profile: input.companyProfile,
+                  known_context: input.context,
+                  whatsapp_url: input.waLink,
+                }),
+              },
+            ],
+          },
+        ],
+      })
+      const reply = this.parseReply(text)
+      if (!reply) return fallback
+      if (
+        input.platform === SOCIAL_PLATFORM.INSTAGRAM &&
+        input.eventType === SOCIAL_EVENT_TYPE.COMMENT &&
+        /https?:\/\/|wa\.me\//i.test(reply)
+      ) {
+        return fallback
+      }
+      const limit =
+        input.eventType === SOCIAL_EVENT_TYPE.COMMENT ? 280 : 500
+      return reply.slice(0, limit)
+    } catch (error) {
+      this.logger.error('Contextual social reply generation failed', error?.message)
+      return fallback
+    }
+  }
+
+  private fallbackReply(input: {
+    eventType: string
+    platform: string
+    eventId: number
+    authorName: string | null
+    waLink: string | null
+    context?: string | null
+  }): string {
+    const name = (input.authorName || '').split(' ')[0] || 'there'
+    if (
+      input.platform === SOCIAL_PLATFORM.INSTAGRAM &&
+      input.eventType === SOCIAL_EVENT_TYPE.COMMENT
+    ) {
+      return `Hi ${name} 👋 Thanks for your interest. Send us a DM with “DETAILS” and we’ll confirm the price, availability and inspection options for you.`
+    }
+
+    const template =
+      input.eventType === SOCIAL_EVENT_TYPE.DM
+        ? DM_REPLY_TEMPLATE
+        : COMMENT_REPLY_TEMPLATES[
+            input.eventId % COMMENT_REPLY_TEMPLATES.length
+          ]
+
+    return template
+      .replace('{name}', name)
+      .replace('{link}', input.waLink || '')
+      .trim()
+  }
+
+  private parseReply(raw: string): string | null {
+    if (!raw) return null
+    const start = raw.indexOf('{')
+    const end = raw.lastIndexOf('}')
+    if (start === -1 || end <= start) return null
+    try {
+      const reply = String(JSON.parse(raw.slice(start, end + 1)).reply || '').trim()
+      return reply ? reply.slice(0, 500) : null
+    } catch {
+      return null
+    }
+  }
+
+  private async replyContext(contentPostId: number | null): Promise<string | null> {
+    if (!contentPostId) return null
+    const post = await this.prisma.content_posts.findUnique({
+      where: { id: contentPostId },
+      include: { property: true },
+    })
+    if (!post) return null
+
+    const facts: string[] = []
+    const property = post.property
+    if (property) {
+      facts.push(`Property: ${property.title}`)
+      if (property.location) facts.push(`Location: ${property.location}`)
+      if (property.state) facts.push(`State: ${property.state}`)
+      if (property.price != null) {
+        facts.push(`Price: ${property.currency || 'NGN'} ${property.price}`)
+      }
+      if (property.title_document) {
+        facts.push(`Title document: ${property.title_document}`)
+      }
+      if (property.payment_plan) facts.push(`Payment plan: ${property.payment_plan}`)
+      facts.push(`Availability: ${property.status}`)
+    }
+    facts.push(`Published post: ${post.caption.slice(0, 700)}`)
+    return facts.join('\n')
+  }
+
+  private companyProfile(value: unknown): string | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const description = (value as Record<string, unknown>).description
+    return typeof description === 'string' && description.trim()
+      ? description.trim().slice(0, 1000)
+      : null
   }
 
   private async isRateLimited(accountId: number): Promise<boolean> {

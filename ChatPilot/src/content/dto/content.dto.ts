@@ -99,10 +99,10 @@ export class UpdateContentAutomationDto {
   @IsBoolean()
   enabled?: boolean
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 3 })
+  @ApiPropertyOptional({ minimum: 2, maximum: 3 })
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(2)
   @Max(3)
   posts_per_day?: number
 

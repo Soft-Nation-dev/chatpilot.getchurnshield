@@ -28,6 +28,14 @@ export class WebhookController {
     return this.webhookService.updateConnectionStatus(statusDto)
   }
 
+  @ApiOperation({ summary: 'Update WhatsApp outbound delivery status' })
+  @Post('whats-bailey/message-update')
+  updateMessageStatus(
+    @Body() body: { id?: string; status?: string; at?: string; fromMe?: boolean },
+  ) {
+    return this.webhookService.updateMessageStatus(body)
+  }
+
   @ApiOperation({ summary: 'Upload media from WB to local storage' })
   @Post('upload-media')
   uploadMedia(

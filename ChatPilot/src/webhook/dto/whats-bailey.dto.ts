@@ -20,6 +20,14 @@ export class LocationDto {
 
 export class WhatsBaileyDto {
   @ApiProperty({
+    type: 'string',
+    description: 'ChatPilot company session ID',
+    required: false,
+    example: '12',
+  })
+  sessionId?: string
+
+  @ApiProperty({
     type: 'boolean',
     description: 'Whether message is from the company',
     example: true,

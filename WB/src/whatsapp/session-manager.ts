@@ -174,7 +174,6 @@ export class SessionManager {
 
       sock.ev.on('messages.upsert', async (m) => {
         try {
-          const keysToAck: any[] = [];
           const toCache: { messageId: string; message: any }[] = [];
           if (m.messages) {
             for (const msg of m.messages) {
@@ -186,18 +185,7 @@ export class SessionManager {
                 }
                 toCache.push({ messageId: msg.key.id, message: msg.message });
               }
-              if (msg.key && !msg.key.fromMe && msg.message) {
-                keysToAck.push(msg.key);
-              }
             }
-          }
-
-          if (keysToAck.length > 0) {
-            sock.readMessages(keysToAck).catch((err: any) => {
-              this.logger.warn(
-                `[${id}] readMessages failed: ${err?.message || 'Unknown error'}`,
-              );
-            });
           }
 
           if (toCache.length > 0) {
@@ -459,13 +447,11 @@ export class SessionManager {
     for (const message of messages) {
 
       try {
-        if (
-          message?.key?.remoteJid?.endsWith('@g.us') ||
-          message?.key?.remoteJid?.endsWith('@broadcast')
-        )
-          continue;
-
         const remoteJid = message?.key?.remoteJid;
+        const isDirectChat =
+          remoteJid?.endsWith('@s.whatsapp.net') || remoteJid?.endsWith('@lid');
+        if (!isDirectChat) continue;
+
         if (remoteJid) {
           const remoteid = remoteJid.split('@')[0];
           if (remoteJid.endsWith('@lid')) {
@@ -502,10 +488,20 @@ export class SessionManager {
           continue;
         }
 
-        const payload = await this.messageHandler(message);
-       
+        const payload = {
+          ...(await this.messageHandler(message)),
+          sessionId: id,
+        };
+
         if (payload.shouldNotifyWebhook) {
-          await this.sendWebhookWithRetry(payload);
+          const accepted = await this.sendWebhookWithRetry(payload);
+          if (accepted && message.key && !message.key.fromMe && message.message) {
+            sock.readMessages([message.key]).catch((err: any) => {
+              this.logger.warn(
+                `[${id}] readMessages failed: ${err?.message || 'Unknown error'}`,
+              );
+            });
+          }
         }
       } catch (messageError: any) {
         this.logger.error(
@@ -584,12 +580,12 @@ export class SessionManager {
     payload: any,
     maxRetries: number = 3,
     delay: number = 1000,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const webhookUrl = process.env.WEBHOOK_URL as string;
 
     if (!webhookUrl) {
       console.warn('WEBHOOK_URL not configured, skipping webhook call');
-      return;
+      return false;
     }
 
     if (payload.hasMedia) {
@@ -638,13 +634,13 @@ export class SessionManager {
 
         if (response.status >= 200 && response.status < 300) {
           console.log(`Webhook sent successfully on attempt ${attempt}`);
-          return;
+          return true;
         } else {
           console.warn(
             `Webhook returned status ${response.status} on attempt ${attempt}`,
           );
           if (response.status < 500) {
-            return;
+            return false;
           }
         }
       } catch (error) {
@@ -662,7 +658,7 @@ export class SessionManager {
             `Failed to send webhook after ${attempt} attempts. Final error:`,
             error.message,
           );
-          return;
+          return false;
         }
 
         const backoffDelay =
@@ -671,6 +667,7 @@ export class SessionManager {
         await this.sleep(backoffDelay);
       }
     }
+    return false;
   }
 
   private isRetryableError(error: any): boolean {
@@ -1104,6 +1101,7 @@ export class SessionManager {
       sessionId: id,
       status,
       message: message,
+      phoneNumber: sock.user?.id?.split(':')[0] || undefined,
     };
 
     try {

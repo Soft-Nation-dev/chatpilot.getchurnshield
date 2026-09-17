@@ -111,12 +111,13 @@ export default function ContentAutomationPage() {
     try {
       const payload = {
         ...settings,
+        approval_required: true,
         posting_times: times.slice(0, settings.posts_per_day),
         posting_days: settings.posting_days || defaults.posting_days,
       }
       const response = await api.put(`/companies/${companyId}/content-automation`, payload)
       setSettings({ ...defaults, ...response.data })
-      setNotice('Automation settings saved. Approval remains required unless you explicitly turn it off.')
+      setNotice('Automation settings saved. Every generated post will remain a draft until approved.')
       return true
     } catch (cause) {
       setError(getErrorMessage(cause, 'Could not save automation settings.'))
@@ -134,9 +135,13 @@ export default function ContentAutomationPage() {
       if (!(await save())) return
       const response = await api.post(`/companies/${companyId}/content-automation/run-now`)
       const created = Number(response.data?.created || 0)
-      setNotice(created
-        ? `${created} draft${created === 1 ? '' : 's'} created. Open Content Approval to review them.`
-        : 'The upcoming time slots already have drafts. No duplicates were created.')
+      const skipped = Array.isArray(response.data?.skipped) ? response.data.skipped : []
+      setNotice([
+        created
+          ? `${created} draft${created === 1 ? '' : 's'} created. Open Content Approval to review them.`
+          : 'The upcoming time slots already have drafts, or a required content source is missing.',
+        ...skipped,
+      ].join(' '))
     } catch (cause) {
       setError(getErrorMessage(cause, 'Could not generate the automatic content plan. Make sure the Vault has an available property with an image.'))
     } finally {
@@ -155,7 +160,7 @@ export default function ContentAutomationPage() {
     {(error || notice) && <div className={`rounded-xl border px-4 py-3 text-sm ${error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>{error || notice}</div>}
 
     <section className="grid gap-4 md:grid-cols-3">
-      {[{ icon: Warehouse, title: '1. Fill the Vault', text: 'Add verified property facts and upload reusable photos or video.' }, { icon: Sparkles, title: '2. AI prepares drafts', text: 'Properties are rotated so the same listing is not repeated too often.' }, { icon: ShieldCheck, title: '3. You approve', text: 'Nothing publishes until an approved draft reaches its scheduled time.' }].map(item => <div key={item.title} className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm"><item.icon className="h-5 w-5 text-emerald-600" /><h3 className="mt-4 text-sm font-semibold text-slate-900">{item.title}</h3><p className="mt-2 text-xs leading-relaxed text-slate-500">{item.text}</p></div>)}
+      {[{ icon: Warehouse, title: '1. Property listing', text: 'Uses verified facts and media from an available Property Vault listing.' }, { icon: Sparkles, title: '2. Business profile', text: 'Builds trust from the business description saved during setup.' }, { icon: ShieldCheck, title: '3. Buyer education', text: 'Adds a useful real-estate tip, FAQ, process guide, or myth-buster when you choose three posts.' }].map(item => <div key={item.title} className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm"><item.icon className="h-5 w-5 text-emerald-600" /><h3 className="mt-4 text-sm font-semibold text-slate-900">{item.title}</h3><p className="mt-2 text-xs leading-relaxed text-slate-500">{item.text}</p></div>)}
     </section>
 
     <form onSubmit={save} className="space-y-6">
@@ -163,15 +168,14 @@ export default function ContentAutomationPage() {
         <h3 className="font-semibold text-slate-900">Safety and status</h3>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <Toggle checked={settings.enabled} onChange={value => update('enabled', value)} label="Automatic draft planning" description="When enabled, ChatPilot checks hourly and fills upcoming posting slots." />
-          <Toggle checked={settings.approval_required} onChange={value => update('approval_required', value)} label="Require human approval" description="Recommended. Drafts remain blocked until a team member approves them." />
+          <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" /><span><span className="block text-sm font-semibold text-emerald-900">Human approval is always required</span><span className="mt-1 block text-xs leading-relaxed text-emerald-700">Automation creates drafts only. Nothing can publish until a team member approves it.</span></span></div>
         </div>
-        {!settings.approval_required && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"><strong>Automatic publishing enabled:</strong> future generated posts will be approved automatically and can publish at their scheduled time.</div>}
       </section>
 
       <section className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm lg:p-6">
         <div><h3 className="font-semibold text-slate-900">Posting schedule</h3><p className="mt-1 text-sm text-slate-500">Times use the company time zone. The planner creates only future, non-duplicate slots.</p></div>
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
-          <div className="space-y-2"><Label htmlFor="posts-per-day">Posts per day</Label><select id="posts-per-day" value={settings.posts_per_day} onChange={event => update('posts_per_day', Number(event.target.value))} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value={1}>1 post</option><option value={2}>2 posts</option><option value={3}>3 posts</option></select></div>
+          <div className="space-y-2"><Label htmlFor="posts-per-day">Posts per day</Label><select id="posts-per-day" value={settings.posts_per_day} onChange={event => update('posts_per_day', Number(event.target.value))} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value={2}>2 posts: property + profile</option><option value={3}>3 posts: property + profile + education</option></select></div>
           <div className="space-y-2"><Label htmlFor="timezone">Time zone</Label><Input id="timezone" value={settings.timezone} onChange={event => update('timezone', event.target.value)} placeholder="Africa/Lagos" /></div>
         </div>
         <div className="mt-5 space-y-2"><Label>Posting times</Label><div className="grid gap-3 sm:grid-cols-3">{times.slice(0, settings.posts_per_day).map((time, index) => <div key={index} className="relative"><Clock3 className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input type="time" value={time} onChange={event => { const next = [...times]; next[index] = event.target.value; update('posting_times', next) }} className="pl-9" /></div>)}</div></div>
@@ -183,7 +187,7 @@ export default function ContentAutomationPage() {
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
           <div className="space-y-2"><Label>Platforms</Label><div className="flex gap-2"><button type="button" onClick={() => togglePlatform('facebook')} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-medium ${selectedPlatforms.includes('facebook') ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500'}`}><Facebook className="h-4 w-4" />Facebook{selectedPlatforms.includes('facebook') && <CheckCircle2 className="h-3.5 w-3.5" />}</button><button type="button" onClick={() => togglePlatform('instagram')} className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-medium ${selectedPlatforms.includes('instagram') ? 'border-pink-300 bg-pink-50 text-pink-700' : 'border-slate-200 text-slate-500'}`}><Instagram className="h-4 w-4" />Instagram{selectedPlatforms.includes('instagram') && <CheckCircle2 className="h-3.5 w-3.5" />}</button></div></div>
           <div className="space-y-2"><Label htmlFor="reuse">Minimum days before reusing a property</Label><Input id="reuse" type="number" min="0" max="90" value={settings.min_reuse_days} onChange={event => update('min_reuse_days', Number(event.target.value))} /></div>
-          <div className="space-y-2 lg:col-span-2"><div className="flex items-center justify-between gap-3"><Label htmlFor="property-ratio">Property showcase share</Label><span className="text-sm font-semibold text-emerald-700">{settings.property_ratio}%</span></div><input id="property-ratio" type="range" min="0" max="100" step="25" value={settings.property_ratio} onChange={event => update('property_ratio', Number(event.target.value))} className="w-full accent-emerald-600" /><p className="text-xs text-slate-400">The remaining posts are educational tips, FAQs and buyer guidance.</p></div>
+          <div className="space-y-2 lg:col-span-2"><Label>Daily content mix</Label><div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">The first slot uses a Property Vault listing, the second uses your saved business profile, and the optional third slot teaches a useful real-estate topic. Sources are fixed so each day stays balanced.</div></div>
         </div>
       </section>
 

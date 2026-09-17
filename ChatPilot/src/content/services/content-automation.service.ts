@@ -17,15 +17,22 @@ export class ContentAutomationService {
     private readonly generator: ContentGeneratorService,
   ) {}
 
-  getSettings(companyId: number) {
-    return this.prisma.content_automation_settings.upsert({
+  async getSettings(companyId: number) {
+    const settings = await this.prisma.content_automation_settings.upsert({
       where: { company_id: companyId },
       create: {
         company_id: companyId,
         posting_times: DEFAULT_TIMES.slice(0, 2),
         posting_days: DEFAULT_DAYS,
       },
-      update: {},
+      update: { approval_required: true },
+    })
+    if (settings.posts_per_day >= 2 && settings.posts_per_day <= 3) {
+      return settings
+    }
+    return this.prisma.content_automation_settings.update({
+      where: { company_id: companyId },
+      data: { posts_per_day: 2, approval_required: true },
     })
   }
 
@@ -47,7 +54,7 @@ export class ContentAutomationService {
         posting_times: dto.posting_times ?? DEFAULT_TIMES.slice(0, 2),
         posting_days: dto.posting_days ?? DEFAULT_DAYS,
         platforms: dto.platforms ?? 'facebook,instagram',
-        approval_required: dto.approval_required ?? true,
+        approval_required: true,
         property_ratio: dto.property_ratio ?? 100,
         min_reuse_days: dto.min_reuse_days ?? 14,
         timezone: dto.timezone ?? 'Africa/Lagos',
@@ -64,9 +71,7 @@ export class ContentAutomationService {
           ? {}
           : { posting_days: dto.posting_days }),
         ...(dto.platforms === undefined ? {} : { platforms: dto.platforms }),
-        ...(dto.approval_required === undefined
-          ? {}
-          : { approval_required: dto.approval_required }),
+        approval_required: true,
         ...(dto.property_ratio === undefined
           ? {}
           : { property_ratio: dto.property_ratio }),
@@ -104,6 +109,11 @@ export class ContentAutomationService {
 
     const platforms = settings.platforms || 'facebook,instagram'
     const needsImage = platforms.split(',').includes('instagram')
+    const company = await this.prisma.companies.findUnique({
+      where: { id: companyId },
+      select: { business_details: true },
+    })
+    const businessProfile = this.businessProfile(company?.business_details)
     const properties = await this.prisma.properties.findMany({
       where: {
         company_id: companyId,
@@ -118,14 +128,6 @@ export class ContentAutomationService {
     const usableProperties = properties.filter(
       property => !needsImage || Boolean(property.image_urls?.trim()),
     )
-    if (!usableProperties.length && settings.property_ratio > 0) {
-      throw new BadRequestException(
-        needsImage
-          ? 'Add an available property with at least one image before generating an Instagram plan.'
-          : 'Add an available property to the Property Vault first.',
-      )
-    }
-
     const recentCutoff = addDays(new Date(), -settings.min_reuse_days)
     const recentlyUsed = await this.prisma.content_posts.findMany({
       where: {
@@ -151,49 +153,74 @@ export class ContentAutomationService {
     )
 
     const now = new Date()
-    const slots: Date[] = []
-    for (let offset = 0; offset < 7 && slots.length < settings.posts_per_day; offset++) {
+    const slots: Array<{ scheduledAt: Date; sourceIndex: number }> = []
+    for (let offset = 0; offset < 7 && slots.length === 0; offset++) {
       const candidate = addDays(now, offset)
       const date = formatInTimeZone(candidate, settings.timezone, 'yyyy-MM-dd')
       const weekday = Number(formatInTimeZone(candidate, settings.timezone, 'i'))
       if (!postingDays.has(weekday)) continue
 
-      for (const time of times) {
+      for (const [sourceIndex, time] of times.entries()) {
         const slot = fromZonedTime(`${date}T${time}:00`, settings.timezone)
         if (slot.getTime() <= now.getTime() + 5 * 60 * 1000) continue
-        slots.push(slot)
+        slots.push({ scheduledAt: slot, sourceIndex })
       }
     }
 
     const created: any[] = []
-    for (const [index, scheduledAt] of slots.slice(0, settings.posts_per_day).entries()) {
+    const skipped: string[] = []
+    const randomKinds = ['educational', 'tip', 'faq', 'myth_buster', 'process']
+    for (const { scheduledAt, sourceIndex } of slots) {
       const duplicate = await this.prisma.content_posts.findFirst({
         where: { company_id: companyId, scheduled_at: scheduledAt },
         select: { id: true },
       })
       if (duplicate) continue
 
-      const showcase =
-        propertyPool.length > 0 &&
-        ((index * 100) / Math.max(settings.posts_per_day, 1) < settings.property_ratio)
-      const property = showcase
-        ? propertyPool[(index + companyId) % propertyPool.length]
-        : null
-      const kind = showcase
-        ? 'showcase'
-        : ['educational', 'tip', 'faq'][index % 3]
+      const source = ['property', 'profile', 'random'][sourceIndex] ?? 'random'
+      if (source === 'property' && !propertyPool.length) {
+        skipped.push(
+          needsImage
+            ? 'Property draft skipped: add an available property with an image.'
+            : 'Property draft skipped: add an available property to the Property Vault.',
+        )
+        continue
+      }
+      if (source === 'profile' && !businessProfile) {
+        skipped.push('Profile draft skipped: add a business description in Setup or Settings.')
+        continue
+      }
+
+      const property =
+        source === 'property'
+          ? propertyPool[(companyId + Math.floor(Date.now() / 86400000)) % propertyPool.length]
+          : null
+      const kind =
+        source === 'property'
+          ? 'showcase'
+          : source === 'profile'
+            ? 'profile'
+            : randomKinds[(companyId + Math.floor(Date.now() / 86400000)) % randomKinds.length]
 
       const post = await this.generator.generate(companyId, {
         kind,
         propertyId: property?.id ?? null,
         scheduledAt,
         platforms,
-        autoApprove: !settings.approval_required,
+        autoApprove: false,
       })
       created.push(post)
     }
 
-    return { created: created.length, posts: created }
+    return { created: created.length, posts: created, skipped }
+  }
+
+  private businessProfile(value: unknown): string | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const description = (value as Record<string, unknown>).description
+    return typeof description === 'string' && description.trim()
+      ? description.trim()
+      : null
   }
 
   private stringArray(value: unknown, fallback: string[]) {
