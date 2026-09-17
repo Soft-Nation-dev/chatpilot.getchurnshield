@@ -151,6 +151,7 @@ function ContentCard({
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [commentsOpen, setCommentsOpen] = useState(post.status === 'published')
+  const editorRef = useRef<HTMLDivElement>(null)
 
   const hasMissingPlatform =
     (facebook && !post.fb_post_id) || (instagram && !post.ig_post_id)
@@ -275,6 +276,21 @@ function ContentCard({
     }
   }
 
+  const toggleEditor = () => {
+    if (expanded) {
+      setExpanded(false)
+      window.setTimeout(() => {
+        document.getElementById(`content-post-${post.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 50)
+      return
+    }
+
+    setExpanded(true)
+    window.setTimeout(() => {
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }
+
   const created = new Intl.DateTimeFormat('en-NG', { dateStyle: 'medium', timeStyle: 'short' })
     .format(new Date(post.published_at || post.created_at))
   const previewImage = firstImage(imageUrl)
@@ -306,7 +322,11 @@ function ContentCard({
           <p className="mt-2 text-xs text-slate-400">{created}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setExpanded(value => !value)}>
+          <Button variant="outline" size="sm" onClick={handleDelete} disabled={busy !== null} className="text-red-600 hover:text-red-700">
+            {busy === 'delete' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+            Delete
+          </Button>
+          <Button variant="outline" size="sm" onClick={toggleEditor} aria-expanded={expanded} aria-controls={`content-editor-${post.id}`}>
             {expanded ? 'Collapse' : post.status === 'published' ? 'View' : 'Edit'}
             <ChevronDown className={`ml-1 h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
           </Button>
@@ -368,7 +388,7 @@ function ContentCard({
       </div>
 
       {expanded ? (
-        <div className="space-y-4 border-t border-slate-200 p-5">
+        <div ref={editorRef} id={`content-editor-${post.id}`} className="scroll-mt-6 space-y-4 border-t border-slate-200 p-5">
           <div className="space-y-2">
             <Label htmlFor={`caption-${post.id}`}>Caption</Label>
             <Textarea id={`caption-${post.id}`} value={caption} onChange={event => setCaption(event.target.value)} rows={8} />
@@ -410,12 +430,7 @@ function ContentCard({
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
-            <Button variant="outline" size="sm" onClick={handleDelete} disabled={busy !== null} className="text-red-600 hover:text-red-700">
-              {busy === 'delete' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-              Delete
-            </Button>
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
               {post.status !== 'published' && post.status !== 'rejected' && (
                 <Button variant="outline" onClick={handleSave} disabled={busy !== null}>
                   {busy === 'save' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PencilLine className="mr-2 h-4 w-4" />}
@@ -438,7 +453,6 @@ function ContentCard({
                   {post.status === 'published' ? 'Retry failed platform' : 'Publish now'}
                 </Button>
               )}
-            </div>
           </div>
         </div>
       ) : null}
