@@ -919,7 +919,10 @@ export class SessionManager {
           where: { sessionId: id },
         })
         .catch(() => null);
-      this.logger.info({ deletedSession }, 'deletedSession');
+      this.logger.info(
+        { sessionId: id, deleted: Boolean(deletedSession) },
+        'deletedSession',
+      );
 
       return {
         success: !!deletedSession,
