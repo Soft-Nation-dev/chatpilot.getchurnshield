@@ -17,7 +17,7 @@ export class ContentSchedulerService implements OnModuleInit {
     )
     await this.contentQueue.upsertJobScheduler(
       'content-plan-check',
-      { pattern: '15 * * * *' },
+      { pattern: '* * * * *' },
       { name: 'plan-drafts', data: {} },
     )
   }

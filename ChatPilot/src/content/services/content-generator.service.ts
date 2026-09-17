@@ -25,6 +25,7 @@ export class ContentGeneratorService {
       scheduledAt?: Date | null
       platforms?: string | null
       autoApprove?: boolean
+      automationGenerated?: boolean
     },
   ) {
     const company = await this.prisma.companies.findUnique({
@@ -68,6 +69,7 @@ export class ContentGeneratorService {
         platforms: options.platforms ?? 'facebook,instagram',
         status: options.autoApprove ? 'approved' : 'draft',
         scheduled_at: options.scheduledAt ?? null,
+        automation_generated: options.automationGenerated ?? false,
       },
     })
   }

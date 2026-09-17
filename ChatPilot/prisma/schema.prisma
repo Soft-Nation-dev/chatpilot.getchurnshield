@@ -7,52 +7,52 @@ datasource db {
 }
 
 model companies {
-  id                         Int                     @id(map: "poc_clinics_companies_pkey") @default(autoincrement())
-  created_at                 DateTime                @default(now()) @db.Timestamptz(6)
-  name                       String                  @db.VarChar
-  cal_event_type_id          BigInt?                 @default(0)
-  cal_event_slug             String?                 @db.VarChar
-  cal_api_key                String?                 @db.VarChar
-  cal_booking_length         BigInt?
-  phone                      BigInt                  @unique(map: "unique phone")
-  updated_at                 DateTime?               @db.Timestamptz(6)
-  is_bot_activated           Boolean?                @default(true)
-  session_id                 String?                 @unique(map: "poc_clinics_companies_wapi_id_key")
-  whatsapp_connection_status Boolean?
-  assistant_id               Int?
-  business_details           Json?
-  email                      String?                 @db.VarChar
-  monthly_lead_quota         Int?                    @default(300)
-  daily_lead_limit           Int?                    @default(50)
-  pool_cursor                Int                     @default(-1)
-  wa_inbound_phone           BigInt?
-  social_reply_enabled       Boolean?                @default(true)
-  social_reply_template      String?
-  vertical                   String?                 @db.VarChar(30)
-  timezone                   String?                 @db.VarChar(60)
-  locale                     String?                 @db.VarChar(10)
-  assistant_instructions     assistant_instructions? @relation(fields: [assistant_id], references: [id])
-  contacts                   contacts[]
-  users                      users[]
-  company_assets             company_assets[]
-  leads                      leads[]
-  lead_requests              lead_requests[]
-  social_accounts            social_accounts[]
-  properties                 properties[]
-  content_posts              content_posts[]
+  id                          Int                          @id(map: "poc_clinics_companies_pkey") @default(autoincrement())
+  created_at                  DateTime                     @default(now()) @db.Timestamptz(6)
+  name                        String                       @db.VarChar
+  cal_event_type_id           BigInt?                      @default(0)
+  cal_event_slug              String?                      @db.VarChar
+  cal_api_key                 String?                      @db.VarChar
+  cal_booking_length          BigInt?
+  phone                       BigInt                       @unique(map: "unique phone")
+  updated_at                  DateTime?                    @db.Timestamptz(6)
+  is_bot_activated            Boolean?                     @default(true)
+  session_id                  String?                      @unique(map: "poc_clinics_companies_wapi_id_key")
+  whatsapp_connection_status  Boolean?
+  assistant_id                Int?
+  business_details            Json?
+  email                       String?                      @db.VarChar
+  monthly_lead_quota          Int?                         @default(300)
+  daily_lead_limit            Int?                         @default(50)
+  pool_cursor                 Int                          @default(-1)
+  wa_inbound_phone            BigInt?
+  social_reply_enabled        Boolean?                     @default(true)
+  social_reply_template       String?
+  vertical                    String?                      @db.VarChar(30)
+  timezone                    String?                      @db.VarChar(60)
+  locale                      String?                      @db.VarChar(10)
+  assistant_instructions      assistant_instructions?      @relation(fields: [assistant_id], references: [id])
+  contacts                    contacts[]
+  users                       users[]
+  company_assets              company_assets[]
+  leads                       leads[]
+  lead_requests               lead_requests[]
+  social_accounts             social_accounts[]
+  properties                  properties[]
+  content_posts               content_posts[]
   content_automation_settings content_automation_settings?
 }
 
 model users {
-  id           Int       @id @default(autoincrement())
-  phone        String    @unique @db.VarChar
-  password     String
-  company_id   Int
-  created_at   DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime? @updatedAt @db.Timestamptz(6)
-  company_name   String?   @db.VarChar
-  otp_code       String?   @db.VarChar(6)
-  otp_expires_at DateTime? @db.Timestamptz(6)
+  id                     Int       @id @default(autoincrement())
+  phone                  String    @unique @db.VarChar
+  password               String
+  company_id             Int
+  created_at             DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime? @updatedAt @db.Timestamptz(6)
+  company_name           String?   @db.VarChar
+  otp_code               String?   @db.VarChar(6)
+  otp_expires_at         DateTime? @db.Timestamptz(6)
   role                   String    @default("owner") @db.VarChar(20)
   status                 String    @default("active") @db.VarChar(20)
   revoked_at             DateTime? @db.Timestamptz(6)
@@ -63,53 +63,53 @@ model users {
   last_login_at          DateTime? @db.Timestamptz(6)
   can_view_contact_phone Boolean   @default(false)
   full_name              String?   @db.VarChar
-  company        companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  company                companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
 
   @@index([company_id, status])
   @@index([invite_token])
 }
 
 model contacts {
-  id                       Int                @id(map: "poc_clinics_contacts_pkey") @default(autoincrement())
-  created_at               DateTime?          @default(now()) @db.Timestamptz(6)
-  updated_at               DateTime?          @default(now()) @db.Timestamptz(6)
-  name                     String?            @db.VarChar
-  phone                    BigInt?
-  schedule_event           Json?              @db.Json
-  last_message_received    DateTime           @default(now()) @db.Timestamptz(6)
-  total_messages           Int                @default(0)
-  needs_review             Boolean            @default(false)
-  company_id               Int?               @default(1)
-  photo_url                String?            @db.VarChar
-  is_bot_activated         Boolean?           @default(true)
-  crm_appointment_at       DateTime?          @db.Timestamptz(6)
-  crm_appointment_id       String?            @db.VarChar
-  whatsapp_profile_name    String?
-  contact_stop_date        DateTime?          @db.Timestamptz(6)
-  is_replies_activated     Boolean?           @default(true)
-  is_follow_up_sent        Boolean            @default(false)
-  lid                      BigInt?
-  budget_min               BigInt?
-  budget_max               BigInt?
-  budget_currency          String?            @default("NGN") @db.VarChar(8)
-  budget_raw               String?
-  property_type            String?            @db.VarChar(50)
-  preferred_location       String?            @db.VarChar(120)
-  bedrooms                 Int?
-  title_preference         String?            @db.VarChar(60)
-  purchase_timeline        String?            @db.VarChar(30)
-  payment_plan             String?            @db.VarChar(30)
-  qualification_notes      String?
-  qual_stage               String             @default("new") @db.VarChar(20)
-  lead_score               Int                @default(0)
-  source                   String?            @db.VarChar(30)
-  source_ref               String?            @db.VarChar(40)
-  social_event_id          Int?
-  assigned_user_id         Int?
-  follow_up_stage          Int                @default(0)
-  last_follow_up_at        DateTime?          @db.Timestamptz(6)
-  companies                companies?         @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "poc_clinics_contacts_company_id_fk")
-  messages                 messages[]
+  id                    Int        @id(map: "poc_clinics_contacts_pkey") @default(autoincrement())
+  created_at            DateTime?  @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime?  @default(now()) @db.Timestamptz(6)
+  name                  String?    @db.VarChar
+  phone                 BigInt?
+  schedule_event        Json?      @db.Json
+  last_message_received DateTime   @default(now()) @db.Timestamptz(6)
+  total_messages        Int        @default(0)
+  needs_review          Boolean    @default(false)
+  company_id            Int?       @default(1)
+  photo_url             String?    @db.VarChar
+  is_bot_activated      Boolean?   @default(true)
+  crm_appointment_at    DateTime?  @db.Timestamptz(6)
+  crm_appointment_id    String?    @db.VarChar
+  whatsapp_profile_name String?
+  contact_stop_date     DateTime?  @db.Timestamptz(6)
+  is_replies_activated  Boolean?   @default(true)
+  is_follow_up_sent     Boolean    @default(false)
+  lid                   BigInt?
+  budget_min            BigInt?
+  budget_max            BigInt?
+  budget_currency       String?    @default("NGN") @db.VarChar(8)
+  budget_raw            String?
+  property_type         String?    @db.VarChar(50)
+  preferred_location    String?    @db.VarChar(120)
+  bedrooms              Int?
+  title_preference      String?    @db.VarChar(60)
+  purchase_timeline     String?    @db.VarChar(30)
+  payment_plan          String?    @db.VarChar(30)
+  qualification_notes   String?
+  qual_stage            String     @default("new") @db.VarChar(20)
+  lead_score            Int        @default(0)
+  source                String?    @db.VarChar(30)
+  source_ref            String?    @db.VarChar(40)
+  social_event_id       Int?
+  assigned_user_id      Int?
+  follow_up_stage       Int        @default(0)
+  last_follow_up_at     DateTime?  @db.Timestamptz(6)
+  companies             companies? @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "poc_clinics_contacts_company_id_fk")
+  messages              messages[]
 
   @@unique([company_id, phone], map: "poc_clinics_contacts_company_phone_key")
   @@index([company_id, qual_stage])
@@ -156,26 +156,26 @@ model company_assets {
 }
 
 model leads {
-  id              Int       @id @default(autoincrement())
-  company_id      Int
-  name            String?   @db.VarChar
-  phone           BigInt?
-  email           String?   @db.VarChar
-  website         String?   @db.VarChar
-  address         String?   @db.VarChar
-  source          String?   @db.VarChar
-  source_id       String?   @db.VarChar
-  raw_text        String?
-  location_state  String?   @db.VarChar
-  status          String    @default("new") @db.VarChar
-  qual_score      Float     @default(0)
-  notes           String?
-  is_bot_activated Boolean  @default(true)
-  contact_id      Int?
-  last_contact_at DateTime? @db.Timestamptz(6)
-  created_at      DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime? @updatedAt @db.Timestamptz(6)
-  company         companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  id               Int       @id @default(autoincrement())
+  company_id       Int
+  name             String?   @db.VarChar
+  phone            BigInt?
+  email            String?   @db.VarChar
+  website          String?   @db.VarChar
+  address          String?   @db.VarChar
+  source           String?   @db.VarChar
+  source_id        String?   @db.VarChar
+  raw_text         String?
+  location_state   String?   @db.VarChar
+  status           String    @default("new") @db.VarChar
+  qual_score       Float     @default(0)
+  notes            String?
+  is_bot_activated Boolean   @default(true)
+  contact_id       Int?
+  last_contact_at  DateTime? @db.Timestamptz(6)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @updatedAt @db.Timestamptz(6)
+  company          companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
 
   @@unique([company_id, phone])
   @@index([company_id, status])
@@ -239,30 +239,32 @@ model properties {
 }
 
 model content_posts {
-  id             Int         @id @default(autoincrement())
-  company_id     Int
-  property_id    Int?
-  kind           String      @db.VarChar(30)
-  topic          String?     @db.VarChar(200)
-  caption        String
-  hashtags       String?
-  image_urls     String?
-  platforms      String?     @default("facebook,instagram") @db.VarChar(60)
-  status         String      @default("draft") @db.VarChar(20)
-  scheduled_at   DateTime?   @db.Timestamptz(6)
-  published_at   DateTime?   @db.Timestamptz(6)
-  fb_post_id     String?     @db.VarChar
-  ig_post_id     String?     @db.VarChar
-  error          String?
-  comments_count Int         @default(0)
-  wa_clicks      Int         @default(0)
-  created_at     DateTime    @default(now()) @db.Timestamptz(6)
-  updated_at     DateTime?   @updatedAt @db.Timestamptz(6)
-  company        companies   @relation(fields: [company_id], references: [id], onDelete: Cascade)
-  property       properties? @relation(fields: [property_id], references: [id], onDelete: SetNull)
+  id                   Int         @id @default(autoincrement())
+  company_id           Int
+  property_id          Int?
+  kind                 String      @db.VarChar(30)
+  topic                String?     @db.VarChar(200)
+  caption              String
+  hashtags             String?
+  image_urls           String?
+  platforms            String?     @default("facebook,instagram") @db.VarChar(60)
+  status               String      @default("draft") @db.VarChar(20)
+  scheduled_at         DateTime?   @db.Timestamptz(6)
+  published_at         DateTime?   @db.Timestamptz(6)
+  fb_post_id           String?     @db.VarChar
+  ig_post_id           String?     @db.VarChar
+  error                String?
+  comments_count       Int         @default(0)
+  wa_clicks            Int         @default(0)
+  automation_generated Boolean     @default(false)
+  created_at           DateTime    @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime?   @updatedAt @db.Timestamptz(6)
+  company              companies   @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  property             properties? @relation(fields: [property_id], references: [id], onDelete: SetNull)
 
   @@index([company_id, status])
   @@index([company_id, scheduled_at])
+  @@index([company_id, automation_generated, status, scheduled_at])
   @@index([fb_post_id])
   @@index([ig_post_id])
 }
@@ -298,23 +300,23 @@ model audit_logs {
 }
 
 model social_accounts {
-  id                Int       @id @default(autoincrement())
-  company_id        Int
-  platform          String    @db.VarChar(20)
-  external_id       String    @db.VarChar
-  page_id           String?   @db.VarChar
-  ig_user_id        String?   @db.VarChar
-  name              String?   @db.VarChar
-  username          String?   @db.VarChar
-  access_token      String
-  token_expires_at  DateTime? @db.Timestamptz(6)
-  scopes            String?
-  is_active         Boolean   @default(true)
-  subscribed_at     DateTime? @db.Timestamptz(6)
-  last_error        String?
-  created_at        DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime? @updatedAt @db.Timestamptz(6)
-  company           companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  id               Int       @id @default(autoincrement())
+  company_id       Int
+  platform         String    @db.VarChar(20)
+  external_id      String    @db.VarChar
+  page_id          String?   @db.VarChar
+  ig_user_id       String?   @db.VarChar
+  name             String?   @db.VarChar
+  username         String?   @db.VarChar
+  access_token     String
+  token_expires_at DateTime? @db.Timestamptz(6)
+  scopes           String?
+  is_active        Boolean   @default(true)
+  subscribed_at    DateTime? @db.Timestamptz(6)
+  last_error       String?
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime? @updatedAt @db.Timestamptz(6)
+  company          companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
 
   @@unique([platform, external_id])
   @@index([company_id])

@@ -39,6 +39,7 @@ describe('ContentAutomationService', () => {
       content_posts: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
     }
     const generator = {
@@ -86,6 +87,7 @@ describe('ContentAutomationService', () => {
       content_posts: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
     }
     const generator = {
@@ -133,6 +135,7 @@ describe('ContentAutomationService', () => {
       content_posts: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
     }
     const generator = {
@@ -150,5 +153,48 @@ describe('ContentAutomationService', () => {
       'profile',
       expect.stringMatching(/educational|tip|faq|myth_buster|process/),
     ])
+  })
+
+  it('removes only expired unapproved automatic drafts and marks new drafts', async () => {
+    const settings = {
+      enabled: true,
+      posts_per_day: 2,
+      posting_times: ['09:00', '18:00'],
+      posting_days: [1, 2, 3, 4, 5, 6, 7],
+      platforms: 'facebook',
+      min_reuse_days: 14,
+      timezone: 'Africa/Lagos',
+    }
+    const prisma = {
+      content_automation_settings: { upsert: jest.fn().mockResolvedValue(settings) },
+      companies: { findUnique: jest.fn().mockResolvedValue({ business_details: { description: 'Trusted property advice.' } }) },
+      properties: { findMany: jest.fn().mockResolvedValue([{ id: 42, image_urls: null }]) },
+      content_posts: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+        deleteMany: jest.fn().mockResolvedValue({ count: 2 }),
+      },
+    }
+    const generator = { generate: jest.fn().mockResolvedValue({ id: 1 }) }
+    const service = new ContentAutomationService(prisma as any, generator as any)
+
+    const result = await service.planCompany(7)
+
+    expect(prisma.content_posts.deleteMany).toHaveBeenCalledWith({
+      where: {
+        company_id: 7,
+        automation_generated: true,
+        status: 'draft',
+        OR: [
+          { scheduled_at: { lt: new Date('2026-09-14T23:00:00.000Z') } },
+          { scheduled_at: { gte: new Date('2026-09-15T23:00:00.000Z') } },
+        ],
+      },
+    })
+    expect(result.deleted).toBe(2)
+    expect(generator.generate).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ automationGenerated: true, autoApprove: false }),
+    )
   })
 })

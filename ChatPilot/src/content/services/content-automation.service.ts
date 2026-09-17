@@ -153,15 +153,30 @@ export class ContentAutomationService {
     )
 
     const now = new Date()
-    const slots: Array<{ scheduledAt: Date; sourceIndex: number }> = []
-    for (let offset = 0; offset < 7 && slots.length === 0; offset++) {
-      const candidate = addDays(now, offset)
-      const date = formatInTimeZone(candidate, settings.timezone, 'yyyy-MM-dd')
-      const weekday = Number(formatInTimeZone(candidate, settings.timezone, 'i'))
-      if (!postingDays.has(weekday)) continue
+    const localDate = formatInTimeZone(now, settings.timezone, 'yyyy-MM-dd')
+    const nextLocalDate = formatInTimeZone(addDays(now, 1), settings.timezone, 'yyyy-MM-dd')
+    const dayStart = fromZonedTime(`${localDate}T00:00:00`, settings.timezone)
+    const nextDayStart = fromZonedTime(`${nextLocalDate}T00:00:00`, settings.timezone)
+    const expired = await this.prisma.content_posts.deleteMany({
+      where: {
+        company_id: companyId,
+        automation_generated: true,
+        status: 'draft',
+        OR: [
+          { scheduled_at: { lt: dayStart } },
+          { scheduled_at: { gte: nextDayStart } },
+        ],
+      },
+    })
+    if (expired.count) {
+      this.logger.log(`Removed ${expired.count} expired automatic draft(s) for company ${companyId}`)
+    }
 
+    const slots: Array<{ scheduledAt: Date; sourceIndex: number }> = []
+    const weekday = Number(formatInTimeZone(now, settings.timezone, 'i'))
+    if (postingDays.has(weekday)) {
       for (const [sourceIndex, time] of times.entries()) {
-        const slot = fromZonedTime(`${date}T${time}:00`, settings.timezone)
+        const slot = fromZonedTime(`${localDate}T${time}:00`, settings.timezone)
         if (slot.getTime() <= now.getTime() + 5 * 60 * 1000) continue
         slots.push({ scheduledAt: slot, sourceIndex })
       }
@@ -208,11 +223,12 @@ export class ContentAutomationService {
         scheduledAt,
         platforms,
         autoApprove: false,
+        automationGenerated: true,
       })
       created.push(post)
     }
 
-    return { created: created.length, posts: created, skipped }
+    return { created: created.length, deleted: expired.count, posts: created, skipped }
   }
 
   private businessProfile(value: unknown): string | null {

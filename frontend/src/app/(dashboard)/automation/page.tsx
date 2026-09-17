@@ -167,13 +167,13 @@ export default function ContentAutomationPage() {
       <section className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm lg:p-6">
         <h3 className="font-semibold text-slate-900">Safety and status</h3>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <Toggle checked={settings.enabled} onChange={value => update('enabled', value)} label="Automatic draft planning" description="When enabled, ChatPilot checks hourly and fills upcoming posting slots." />
+          <Toggle checked={settings.enabled} onChange={value => update('enabled', value)} label="Automatic draft planning" description="When enabled, ChatPilot prepares each day’s drafts shortly after 00:00 in your company time zone." />
           <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" /><span><span className="block text-sm font-semibold text-emerald-900">Human approval is always required</span><span className="mt-1 block text-xs leading-relaxed text-emerald-700">Automation creates drafts only. Nothing can publish until a team member approves it.</span></span></div>
         </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm lg:p-6">
-        <div><h3 className="font-semibold text-slate-900">Posting schedule</h3><p className="mt-1 text-sm text-slate-500">Times use the company time zone. The planner creates only future, non-duplicate slots.</p></div>
+        <div><h3 className="font-semibold text-slate-900">Posting schedule</h3><p className="mt-1 text-sm text-slate-500">Times use the company time zone. Today’s drafts are prepared after midnight and any unapproved automatic drafts expire at the next midnight.</p></div>
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
           <div className="space-y-2"><Label htmlFor="posts-per-day">Posts per day</Label><select id="posts-per-day" value={settings.posts_per_day} onChange={event => update('posts_per_day', Number(event.target.value))} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"><option value={2}>2 posts: property + profile</option><option value={3}>3 posts: property + profile + education</option></select></div>
           <div className="space-y-2"><Label htmlFor="timezone">Time zone</Label><Input id="timezone" value={settings.timezone} onChange={event => update('timezone', event.target.value)} placeholder="Africa/Lagos" /></div>
