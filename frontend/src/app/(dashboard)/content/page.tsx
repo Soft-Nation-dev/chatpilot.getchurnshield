@@ -11,14 +11,18 @@ import {
   Clock3,
   ExternalLink,
   Facebook,
+  Globe2,
   Instagram,
   ImageIcon,
   Loader2,
   MessageCircle,
+  MoreHorizontal,
   PencilLine,
   RefreshCw,
   Send,
+  Share2,
   Sparkles,
+  ThumbsUp,
   Trash2,
 } from 'lucide-react'
 import { useAuth } from '@/context/auth-context'
@@ -53,6 +57,8 @@ type ContentPost = {
 type SocialAccount = {
   id: number
   platform: string
+  name: string | null
+  username: string | null
   is_active: boolean
   subscribed_at: string | null
 }
@@ -85,6 +91,10 @@ function localDateTime(value: string | null) {
 function splitPlatforms(value: string | null) {
   const parts = (value || 'facebook').split(',').map(item => item.trim())
   return { facebook: parts.includes('facebook'), instagram: parts.includes('instagram') }
+}
+
+function firstImage(value: string) {
+  return value.split(',').map(item => item.trim()).find(Boolean) || ''
 }
 
 function PlatformButton({
@@ -120,11 +130,13 @@ function ContentCard({
   post,
   companyId,
   onChanged,
+  companyName,
   focused = false,
 }: {
   post: ContentPost
   companyId: number
   onChanged: (message?: string) => Promise<void>
+  companyName: string
   focused?: boolean
 }) {
   const initialPlatforms = splitPlatforms(post.platforms)
@@ -138,7 +150,7 @@ function ContentCard({
   const [busy, setBusy] = useState<'save' | 'publish' | 'delete' | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [commentsOpen, setCommentsOpen] = useState(false)
+  const [commentsOpen, setCommentsOpen] = useState(post.status === 'published')
 
   const hasMissingPlatform =
     (facebook && !post.fb_post_id) || (instagram && !post.ig_post_id)
@@ -265,6 +277,10 @@ function ContentCard({
 
   const created = new Intl.DateTimeFormat('en-NG', { dateStyle: 'medium', timeStyle: 'short' })
     .format(new Date(post.published_at || post.created_at))
+  const previewImage = firstImage(imageUrl)
+  const previewCaption = caption.trim() || 'Your post caption will appear here.'
+  const previewHashtags = hashtags.trim()
+  const profileInitial = (companyName.trim()[0] || 'C').toUpperCase()
 
   return (
     <motion.article
@@ -276,7 +292,7 @@ function ContentCard({
           : 'border-slate-200/70'
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className={statusStyle[post.status] || statusStyle.draft}>
@@ -285,16 +301,11 @@ function ContentCard({
             <span className="text-xs font-medium capitalize text-slate-500">{post.kind.replaceAll('_', ' ')}</span>
             {post.fb_post_id && <Facebook className="h-3.5 w-3.5 text-blue-600" />}
             {post.ig_post_id && <Instagram className="h-3.5 w-3.5 text-pink-600" />}
+            {post.wa_clicks > 0 && <span className="text-xs text-slate-500">WA enquiries {post.wa_clicks}</span>}
           </div>
           <p className="mt-2 text-xs text-slate-400">{created}</p>
         </div>
         <div className="flex items-center gap-2">
-          {(post.fb_post_id || post.ig_post_id || post.comments_count > 0) && (
-            <div className="mr-2 flex items-center gap-3 text-xs text-slate-500">
-              <button type="button" aria-expanded={commentsOpen} onClick={() => setCommentsOpen(value => !value)} className="inline-flex items-center gap-1 rounded-lg px-2 py-2 text-blue-700 hover:bg-blue-50"><MessageCircle className="h-3.5 w-3.5" />{post.comments_count} Comments &amp; replies</button>
-              <span className="inline-flex items-center gap-1">WA {post.wa_clicks}</span>
-            </div>
-          )}
           <Button variant="outline" size="sm" onClick={() => setExpanded(value => !value)}>
             {expanded ? 'Collapse' : post.status === 'published' ? 'View' : 'Edit'}
             <ChevronDown className={`ml-1 h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -302,9 +313,63 @@ function ContentCard({
         </div>
       </div>
 
-      {commentsOpen && <ContentComments companyId={companyId} postId={post.id} />}
+      <div className="bg-slate-100/70 px-3 py-5 sm:px-5">
+        <section aria-label="Social post preview" className="mx-auto max-w-2xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-start gap-3 px-4 pb-3 pt-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white" aria-hidden="true">
+              {profileInitial}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[15px] font-semibold leading-5 text-slate-900">{companyName}</p>
+              <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+                <span>{created}</span><span aria-hidden="true">·</span><Globe2 className="h-3.5 w-3.5" aria-label="Public post" />
+              </div>
+            </div>
+            <MoreHorizontal className="h-5 w-5 text-slate-500" aria-hidden="true" />
+          </div>
+
+          <div className="px-4 pb-3">
+            <p className="whitespace-pre-line break-words text-[15px] leading-5 text-slate-800">{previewCaption}</p>
+            {previewHashtags && <p className="mt-2 whitespace-pre-wrap break-words text-[15px] leading-5 text-blue-600">{previewHashtags}</p>}
+          </div>
+
+          {previewImage ? (
+            <div className="border-y border-slate-200 bg-slate-100">
+              <img src={previewImage} alt="Post media preview" className="mx-auto max-h-[38rem] w-full object-contain" />
+            </div>
+          ) : (
+            <div className="flex min-h-44 flex-col items-center justify-center border-y border-dashed border-slate-200 bg-slate-50 px-4 text-center text-slate-400">
+              <ImageIcon className="h-8 w-8" />
+              <p className="mt-2 text-sm">No picture attached to this post</p>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between px-4 py-2 text-sm text-slate-500">
+            <span className="inline-flex items-center gap-1.5"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600"><Facebook className="h-3 w-3 fill-white text-white" /></span>Facebook-style preview</span>
+            <button type="button" aria-expanded={commentsOpen} onClick={() => setCommentsOpen(value => !value)} className="rounded px-1 py-0.5 hover:text-slate-800 hover:underline">
+              {post.comments_count} {post.comments_count === 1 ? 'comment' : 'comments'}
+            </button>
+          </div>
+          <div className="mx-4 border-t border-slate-200" />
+          <div className="grid grid-cols-3 px-2 py-1 text-sm font-semibold text-slate-600">
+            <span className="flex items-center justify-center gap-2 rounded-lg py-2"><ThumbsUp className="h-5 w-5" />Like</span>
+            <button type="button" onClick={() => setCommentsOpen(true)} className="flex items-center justify-center gap-2 rounded-lg py-2 hover:bg-slate-100"><MessageCircle className="h-5 w-5" />Comment</button>
+            <span className="flex items-center justify-center gap-2 rounded-lg py-2"><Share2 className="h-5 w-5" />Share</span>
+          </div>
+
+          {(post.fb_post_id || post.ig_post_id || post.comments_count > 0) && commentsOpen && (
+            <ContentComments companyId={companyId} postId={post.id} />
+          )}
+          {(post.fb_post_id || post.ig_post_id || post.comments_count > 0) && !commentsOpen && (
+            <button type="button" onClick={() => setCommentsOpen(true)} className="w-full border-t border-slate-200 px-4 py-3 text-left text-sm font-semibold text-slate-600 hover:bg-slate-50">
+              View comments and ChatPilot replies
+            </button>
+          )}
+        </section>
+      </div>
+
       {expanded ? (
-        <div className="space-y-4 p-5">
+        <div className="space-y-4 border-t border-slate-200 p-5">
           <div className="space-y-2">
             <Label htmlFor={`caption-${post.id}`}>Caption</Label>
             <Textarea id={`caption-${post.id}`} value={caption} onChange={event => setCaption(event.target.value)} rows={8} />
@@ -377,11 +442,7 @@ function ContentCard({
             </div>
           </div>
         </div>
-      ) : (
-        <div className="p-5">
-          <p className="line-clamp-3 whitespace-pre-line text-sm leading-relaxed text-slate-700">{post.caption}</p>
-        </div>
-      )}
+      ) : null}
     </motion.article>
   )
 }
@@ -664,7 +725,14 @@ export default function ContentPage() {
         {loading ? (
           <div className="flex min-h-40 items-center justify-center rounded-2xl border border-slate-200 bg-white"><Loader2 className="h-6 w-6 animate-spin text-emerald-600" /></div>
         ) : posts.length ? (
-          <div className="space-y-4">{posts.map(post => <ContentCard key={post.id} post={post} companyId={companyId!} onChanged={changed} focused={post.id === focusedPostId} />)}</div>
+          <div className="space-y-6">{posts.map(post => {
+            const platforms = splitPlatforms(post.platforms)
+            const connectedAccount = accounts.find(account => account.is_active && (
+              (platforms.facebook && account.platform === 'facebook') ||
+              (platforms.instagram && account.platform === 'instagram')
+            ))
+            return <ContentCard key={post.id} post={post} companyId={companyId!} companyName={connectedAccount?.name || connectedAccount?.username || user?.company_name || 'Your business'} onChanged={changed} focused={post.id === focusedPostId} />
+          })}</div>
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center"><Sparkles className="mx-auto h-8 w-8 text-slate-300" /><h4 className="mt-4 font-semibold text-slate-800">No content yet</h4><p className="mt-1 text-sm text-slate-500">Generate your first draft above.</p></div>
         )}
