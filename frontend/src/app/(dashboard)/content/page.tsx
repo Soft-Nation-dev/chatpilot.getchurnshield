@@ -29,6 +29,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { ContentComments } from '@/components/content-comments'
 
 type ContentPost = {
   id: number
@@ -137,6 +138,7 @@ function ContentCard({
   const [busy, setBusy] = useState<'save' | 'publish' | 'delete' | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [commentsOpen, setCommentsOpen] = useState(false)
 
   const hasMissingPlatform =
     (facebook && !post.fb_post_id) || (instagram && !post.ig_post_id)
@@ -287,9 +289,9 @@ function ContentCard({
           <p className="mt-2 text-xs text-slate-400">{created}</p>
         </div>
         <div className="flex items-center gap-2">
-          {post.status === 'published' && (
+          {(post.fb_post_id || post.ig_post_id || post.comments_count > 0) && (
             <div className="mr-2 flex items-center gap-3 text-xs text-slate-500">
-              <span className="inline-flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" />{post.comments_count}</span>
+              <button type="button" aria-expanded={commentsOpen} onClick={() => setCommentsOpen(value => !value)} className="inline-flex items-center gap-1 rounded-lg px-2 py-2 text-blue-700 hover:bg-blue-50"><MessageCircle className="h-3.5 w-3.5" />{post.comments_count} Comments &amp; replies</button>
               <span className="inline-flex items-center gap-1">WA {post.wa_clicks}</span>
             </div>
           )}
@@ -300,6 +302,7 @@ function ContentCard({
         </div>
       </div>
 
+      {commentsOpen && <ContentComments companyId={companyId} postId={post.id} />}
       {expanded ? (
         <div className="space-y-4 p-5">
           <div className="space-y-2">

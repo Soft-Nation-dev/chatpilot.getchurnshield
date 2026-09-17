@@ -16,6 +16,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard'
 import { CompanyAccessService } from 'src/company/company-access.service'
 import { PrismaService } from 'src/prisma/prisma.service'
+import { decryptMessage } from 'src/common/crypto/message-crypto'
 import { PropertyService } from './services/property.service'
 import { ContentGeneratorService } from './services/content-generator.service'
 import { ContentPublisherService } from './services/content-publisher.service'
@@ -142,6 +143,55 @@ export class ContentController {
       orderBy: { id: 'desc' },
       take: 100,
     })
+  }
+
+  @ApiOperation({ summary: 'Read captured comments and replies for a post' })
+  @Get('content/:postId/comments')
+  async listComments(
+    @Request() req: any,
+    @Param('companyId', ParseIntPipe) companyId: number,
+    @Param('postId', ParseIntPipe) postId: number,
+    @Query('before') before?: string,
+  ) {
+    await this.companyAccess.assertAccess(req.user, companyId)
+    await this.requirePost(companyId, postId)
+    const cursor = Number(before)
+    const rows = await this.prisma.social_events.findMany({
+      where: {
+        company_id: companyId,
+        content_post_id: postId,
+        event_type: 'comment',
+        ...(Number.isSafeInteger(cursor) && cursor > 0 ? { id: { lt: cursor } } : {}),
+      },
+      orderBy: { id: 'desc' },
+      take: 51,
+      select: {
+        id: true, platform: true, external_user_name: true, text: true,
+        reply_text: true, action: true, created_at: true, updated_at: true,
+        social_account_id: true,
+      },
+    })
+    const page = rows.slice(0, 50)
+    const accounts = await this.prisma.social_accounts.findMany({
+      where: {
+        company_id: companyId,
+        id: { in: page.map(row => row.social_account_id).filter((id): id is number => id !== null) },
+      },
+      select: { id: true, name: true, username: true },
+    })
+    const readable = (value: string | null) => {
+      const plain = decryptMessage(value)
+      return plain?.startsWith('enc:v1:') ? null : plain
+    }
+    return {
+      items: page.map(row => ({
+        id: row.id, platform: row.platform, author: row.external_user_name,
+        text: readable(row.text), reply: readable(row.reply_text),
+        action: row.action, created_at: row.created_at, updated_at: row.updated_at,
+        account: accounts.find(account => account.id === row.social_account_id) ?? null,
+      })),
+      next_cursor: rows.length > 50 ? page[page.length - 1].id : null,
+    }
   }
 
   @ApiOperation({ summary: 'Generate one social post with AI' })
