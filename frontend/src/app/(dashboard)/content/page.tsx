@@ -299,8 +299,8 @@ function ContentCard({
               {post.status.replaceAll('_', ' ')}
             </Badge>
             <span className="text-xs font-medium capitalize text-slate-500">{post.kind.replaceAll('_', ' ')}</span>
-            {post.fb_post_id && <Facebook className="h-3.5 w-3.5 text-blue-600" />}
-            {post.ig_post_id && <Instagram className="h-3.5 w-3.5 text-pink-600" />}
+            {facebook && <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700"><Facebook className="h-3.5 w-3.5" />Facebook</span>}
+            {instagram && <span className="inline-flex items-center gap-1 rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-xs font-semibold text-pink-700"><Instagram className="h-3.5 w-3.5" />Instagram</span>}
             {post.wa_clicks > 0 && <span className="text-xs text-slate-500">WA enquiries {post.wa_clicks}</span>}
           </div>
           <p className="mt-2 text-xs text-slate-400">{created}</p>
@@ -344,8 +344,7 @@ function ContentCard({
             </div>
           )}
 
-          <div className="flex items-center justify-between px-4 py-2 text-sm text-slate-500">
-            <span className="inline-flex items-center gap-1.5"><span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600"><Facebook className="h-3 w-3 fill-white text-white" /></span>Facebook-style preview</span>
+          <div className="flex items-center justify-end px-4 py-2 text-sm text-slate-500">
             <button type="button" aria-expanded={commentsOpen} onClick={() => setCommentsOpen(value => !value)} className="rounded px-1 py-0.5 hover:text-slate-800 hover:underline">
               {post.comments_count} {post.comments_count === 1 ? 'comment' : 'comments'}
             </button>
