@@ -23,6 +23,11 @@ type Session = {
   lastDisconnectError?: any;
 };
 
+export const isDirectWhatsAppChat = (remoteJid?: string | null): boolean =>
+  Boolean(
+    remoteJid?.endsWith('@s.whatsapp.net') || remoteJid?.endsWith('@lid'),
+  );
+
 @Injectable()
 export class SessionManager {
   private sessions: Map<string, Session> = new Map();
@@ -177,7 +182,11 @@ export class SessionManager {
           const toCache: { messageId: string; message: any }[] = [];
           if (m.messages) {
             for (const msg of m.messages) {
-              if (msg.key?.id && msg.message) {
+              if (
+                msg.key?.id &&
+                msg.message &&
+                isDirectWhatsAppChat(msg.key?.remoteJid)
+              ) {
                 msgStore.set(msg.key.id, msg);
                 if (msgStore.size > this.MESSAGE_STORE_LIMIT) {
                   const firstKey = msgStore.keys().next().value;
@@ -448,9 +457,7 @@ export class SessionManager {
 
       try {
         const remoteJid = message?.key?.remoteJid;
-        const isDirectChat =
-          remoteJid?.endsWith('@s.whatsapp.net') || remoteJid?.endsWith('@lid');
-        if (!isDirectChat) continue;
+        if (!isDirectWhatsAppChat(remoteJid)) continue;
 
         if (remoteJid) {
           const remoteid = remoteJid.split('@')[0];

@@ -304,9 +304,10 @@ export class CompanyController {
     @Body() body: { is_bot_activated: boolean },
   ) {
     await this.verifyOwnership(req.user.userId, id)
-    return this.companyService.updateCompany(id, {
-      is_bot_activated: body.is_bot_activated,
-    } as any)
+    return this.companyService.setBotActivation(
+      id,
+      body.is_bot_activated,
+    )
   }
 
   @ApiOperation({ summary: 'Get company settings (email, monthly lead quota, profile)' })
@@ -389,6 +390,7 @@ export class CompanyController {
     await this.verifyOwnership(req.user.userId, id)
     return this.contactService.updateContact(contactId, {
       is_bot_activated: body.is_bot_activated,
+      ...(body.is_bot_activated ? { is_replies_activated: true } : {}),
     })
   }
 

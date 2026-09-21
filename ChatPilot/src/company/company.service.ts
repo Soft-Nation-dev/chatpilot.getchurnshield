@@ -151,6 +151,32 @@ export class CompanyService {
       data: updateCompanyDto as any,
     })) as Company
   }
+
+  async setBotActivation(companyId: number, isActive: boolean): Promise<Company> {
+    if (!isActive) {
+      return this.updateCompany(companyId, { is_bot_activated: false } as any)
+    }
+
+    const [company] = await this.prisma.$transaction([
+      this.prisma.companies.update({
+        where: { id: companyId },
+        data: { is_bot_activated: true },
+      }),
+      this.prisma.contacts.updateMany({
+        where: { company_id: companyId },
+        data: {
+          is_bot_activated: true,
+          is_replies_activated: true,
+        },
+      }),
+      this.prisma.leads.updateMany({
+        where: { company_id: companyId },
+        data: { is_bot_activated: true },
+      }),
+    ])
+
+    return company as Company
+  }
   async getSessionQrCode(res, companyId: number) {
     const company = await this.findById(companyId)
     if (!company) throw new UnprocessableEntityException('company not found')

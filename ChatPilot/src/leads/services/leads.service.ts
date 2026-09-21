@@ -213,7 +213,10 @@ export class LeadsService {
     if (lead.contact_id) {
       await this.prisma.contacts.update({
         where: { id: lead.contact_id },
-        data: { is_bot_activated: value },
+        data: {
+          is_bot_activated: value,
+          ...(value ? { is_replies_activated: true } : {}),
+        },
       });
     }
     return updated;
