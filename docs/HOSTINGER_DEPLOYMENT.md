@@ -1,5 +1,77 @@
 # Hostinger production deployment
 
+## Current production access and layout
+
+Use this section for future deployments so the server does not need to be
+rediscovered each time.
+
+- VPS hostname: `srv1926036.hstgr.cloud` (`185.230.64.44`)
+- SSH user: `root`
+- Host key fingerprint: `SHA256:E6fDvsTxnpTDbzDobVA45qOmL/MUOB5DUy1LldcBNUk`
+- Hostinger SSH-key label: `temporary-chatpilot-deploy-3`
+- Local private-key path on the deployment PC:
+  `C:\Users\HP\.ssh\chatpilot-codex-deploy-3`
+- Active release symlink: `/opt/churnshield/current`
+- Immutable releases: `/opt/churnshield/releases/<short-git-sha>`
+- Shared infrastructure Compose directory: `/opt/churnshield/deployment`
+
+The SSH private key and API-provider credentials must never be copied into this
+repository. Keep `temporary-chatpilot-deploy-3` installed until it is replaced
+with another verified deployment key. Provider credentials live only in the
+active release's `infra/hostinger/.env` file.
+
+The shared Compose directory owns Caddy, PostgreSQL, Redis, and their persistent
+volumes. The active release's `infra/hostinger/docker-compose.yml` owns the
+`chatpilot` and `whatsapp-bot` application containers under the same
+`deployment` Compose project. Never run `docker compose down -v`.
+
+## Repeatable release deployment
+
+Production is release-based rather than a Git checkout. For backend changes:
+
+1. Verify the desired commit locally and run the full test/build suite.
+2. Create a tracked-files-only archive with `git archive`.
+3. Upload it over SFTP and extract it to
+   `/opt/churnshield/releases/<short-git-sha>`.
+4. Copy `/opt/churnshield/current/infra/hostinger/.env` to the new release,
+   preserving mode `0600`. Add or update secrets there only; never put them in
+   the archive or shell output.
+5. From the new release's `infra/hostinger` directory, run:
+
+```bash
+docker compose -p deployment --env-file .env config --quiet
+docker compose -p deployment --env-file .env build chatpilot
+docker compose -p deployment --env-file .env run --rm --no-deps chatpilot npx prisma migrate deploy
+docker compose -p deployment --env-file .env up -d --no-deps chatpilot
+```
+
+6. Verify the new API container internally before changing the active symlink:
+
+```bash
+docker exec chatpilot node -e "fetch('http://127.0.0.1:3000/api/v1/').then(r => { if (!r.ok) process.exit(1) })"
+```
+
+7. Atomically point `current` to the verified release:
+
+```bash
+ln -sfn /opt/churnshield/releases/<short-git-sha> /opt/churnshield/current.next
+mv -Tf /opt/churnshield/current.next /opt/churnshield/current
+```
+
+8. Confirm the public API and private WhatsApp gateway. The WhatsApp container
+   should retain its earlier start time when only `chatpilot` was changed:
+
+```bash
+curl -fsS -o /dev/null https://api.trygetchurnshield.com/api/v1/
+docker exec chatpilot node -e "fetch('http://whatsapp-bot:3001/api/v1/whatsapp/sessions').then(r => { if (!r.ok) process.exit(1); console.log('WhatsApp gateway OK') })"
+docker compose -p deployment --env-file .env ps
+docker compose -p deployment --env-file .env logs --tail=150 chatpilot
+```
+
+Commit `44c5c69` was deployed successfully with this process on 21 September
+2026. It added the Cloudflare Workers AI → Groq → Gemini routing and the
+`20260921033000_add_ai_usage_events` migration.
+
 The Cloudflare-hosted frontend is deployed independently by GitHub Actions. Hostinger must run the two backend services that power it:
 
 - `ChatPilot`: the API, AI logic, and PostgreSQL-backed business data.
