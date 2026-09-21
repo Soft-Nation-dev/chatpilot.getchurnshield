@@ -1,12 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from 'src/prisma/prisma.service'
-import { Contact } from 'src/utils/constants/types'
 import {
-  GEMINI_MODELS,
-  GeminiModelKey,
-} from 'src/common/logging/getModel'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { LanguageModel } from 'ai'
+  AiChatMessage,
+  AiSdkToolsNames,
+  Contact,
+} from 'src/utils/constants/types'
 import { AiToolsService } from './ai-tools.service'
 import {
   BUILTIN_TOOL_INSTRUCTIONS,
@@ -14,17 +12,10 @@ import {
 } from '../constants/builtin-prompt'
 import { REAL_ESTATE_KNOWLEDGE } from '../constants/real-estate-prompt'
 
-const DEFAULT_MODEL: GeminiModelKey = 'gemini-3.6-flash'
-
 type AssistantConfig = {
   systemPrompt: string
-  model: LanguageModel
   tools: any
   temperature: number
-  metadata: {
-    provider: string
-    model: string
-  }
 }
 
 @Injectable()
@@ -38,7 +29,10 @@ export class AiAssistantConfigService {
     this.logger.log('AiConfigService initialized')
   }
 
-  async getAssistantConfig(contact: Contact): Promise<AssistantConfig | null> {
+  async getAssistantConfig(
+    contact: Contact,
+    recentMessages: AiChatMessage[] = [],
+  ): Promise<AssistantConfig | null> {
     const company = contact?.companies
 
     if (!company?.assistant_id) {
@@ -71,8 +65,10 @@ export class AiAssistantConfigService {
         return null
       }
 
-      const modelConfig = this.getModel(assistant.model ?? DEFAULT_MODEL)
-      const tools = this.aiToolsService.getContactTools(contact, [])
+      const tools = this.aiToolsService.getContactTools(
+        contact,
+        this.toolsToExclude(contact, recentMessages),
+      )
 
       // Assemble full prompt: built-in tool instructions + company custom prompt + asset references
       const companyPrompt =
@@ -88,10 +84,8 @@ export class AiAssistantConfigService {
 
       return {
         systemPrompt: fullSystemPrompt,
-        model: modelConfig.model,
         tools,
         temperature: assistant.temperature ?? 0.1,
-        metadata: modelConfig.metadata,
       }
     } catch (error) {
       this.logger.error('Error getting assistant config', {
@@ -167,24 +161,32 @@ export class AiAssistantConfigService {
     }
   }
 
-  private getModel(modelName: string): {
-    model: LanguageModel
-    metadata: { provider: string; model: string }
-  } {
-    const google = createGoogleGenerativeAI({
-      apiKey: process.env.GEMINI_API_KEY,
-    })
+  private toolsToExclude(
+    contact: Contact,
+    recentMessages: AiChatMessage[],
+  ): AiSdkToolsNames[] {
+    const context = recentMessages
+      .slice(-4)
+      .flatMap(message => message.content)
+      .map(part => part.text || '')
+      .join(' ')
+      .toLowerCase()
+    const appointmentContext =
+      /appointment|inspection|inspect|schedule|booking|book|available slot|visit|viewing|reschedule|cancel/.test(
+        context,
+      ) || !!contact.crm_appointment_id
+    const cancellationContext =
+      /cancel|reschedule|change.*appointment/.test(context) ||
+      !!contact.crm_appointment_id
 
-    const resolvedName = GEMINI_MODELS.includes(modelName as GeminiModelKey)
-      ? (modelName as GeminiModelKey)
-      : DEFAULT_MODEL
-
-    return {
-      model: google(resolvedName),
-      metadata: {
-        provider: 'google',
-        model: resolvedName,
-      },
+    const excluded: AiSdkToolsNames[] = [
+      'change_bot_status',
+      'activate_replies',
+    ]
+    if (!appointmentContext) {
+      excluded.push('get_available_slots', 'book_appointment')
     }
+    if (!cancellationContext) excluded.push('cancel_appointment')
+    return excluded
   }
 }

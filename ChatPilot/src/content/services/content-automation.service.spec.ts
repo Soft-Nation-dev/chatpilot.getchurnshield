@@ -27,14 +27,17 @@ describe('ContentAutomationService', () => {
       companies: {
         findUnique: jest.fn().mockResolvedValue({
           business_details: {
-            description: 'We help first-time buyers verify and purchase homes in Lagos.',
+            description:
+              'We help first-time buyers verify and purchase homes in Lagos.',
           },
         }),
       },
       properties: {
-        findMany: jest.fn().mockResolvedValue([
-          { id: 42, image_urls: 'https://example.com/home.jpg' },
-        ]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 42, image_urls: 'https://example.com/home.jpg' },
+          ]),
       },
       content_posts: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -43,9 +46,11 @@ describe('ContentAutomationService', () => {
       },
     }
     const generator = {
-      generate: jest.fn().mockImplementation((_companyId, input) =>
-        Promise.resolve({ id: input.kind }),
-      ),
+      generate: jest
+        .fn()
+        .mockImplementation((_companyId, input) =>
+          Promise.resolve({ id: input.kind }),
+        ),
     }
     const service = new ContentAutomationService(
       prisma as any,
@@ -62,7 +67,11 @@ describe('ContentAutomationService', () => {
     ])
     expect(generator.generate.mock.calls[0][1].propertyId).toBe(42)
     expect(generator.generate.mock.calls[1][1].propertyId).toBeNull()
-    expect(generator.generate.mock.calls.every(call => call[1].autoApprove === false)).toBe(true)
+    expect(
+      generator.generate.mock.calls.every(
+        call => call[1].autoApprove === false,
+      ),
+    ).toBe(true)
   })
 
   it('keeps other draft sources running when a property is missing', async () => {
@@ -128,9 +137,11 @@ describe('ContentAutomationService', () => {
         }),
       },
       properties: {
-        findMany: jest.fn().mockResolvedValue([
-          { id: 42, image_urls: 'https://example.com/home.jpg' },
-        ]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 42, image_urls: 'https://example.com/home.jpg' },
+          ]),
       },
       content_posts: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -166,9 +177,17 @@ describe('ContentAutomationService', () => {
       timezone: 'Africa/Lagos',
     }
     const prisma = {
-      content_automation_settings: { upsert: jest.fn().mockResolvedValue(settings) },
-      companies: { findUnique: jest.fn().mockResolvedValue({ business_details: { description: 'Trusted property advice.' } }) },
-      properties: { findMany: jest.fn().mockResolvedValue([{ id: 42, image_urls: null }]) },
+      content_automation_settings: {
+        upsert: jest.fn().mockResolvedValue(settings),
+      },
+      companies: {
+        findUnique: jest.fn().mockResolvedValue({
+          business_details: { description: 'Trusted property advice.' },
+        }),
+      },
+      properties: {
+        findMany: jest.fn().mockResolvedValue([{ id: 42, image_urls: null }]),
+      },
       content_posts: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
@@ -176,7 +195,10 @@ describe('ContentAutomationService', () => {
       },
     }
     const generator = { generate: jest.fn().mockResolvedValue({ id: 1 }) }
-    const service = new ContentAutomationService(prisma as any, generator as any)
+    const service = new ContentAutomationService(
+      prisma as any,
+      generator as any,
+    )
 
     const result = await service.planCompany(7)
 
@@ -194,7 +216,10 @@ describe('ContentAutomationService', () => {
     expect(result.deleted).toBe(2)
     expect(generator.generate).toHaveBeenCalledWith(
       7,
-      expect.objectContaining({ automationGenerated: true, autoApprove: false }),
+      expect.objectContaining({
+        automationGenerated: true,
+        autoApprove: false,
+      }),
     )
   })
 })

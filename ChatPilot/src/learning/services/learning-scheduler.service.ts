@@ -6,7 +6,8 @@ import { BackgroundQueue } from 'src/utils/constants/background.constants'
 @Injectable()
 export class LearningSchedulerService implements OnModuleInit {
   constructor(
-    @InjectQueue(BackgroundQueue.LEARNING) private readonly learningQueue: Queue,
+    @InjectQueue(BackgroundQueue.LEARNING)
+    private readonly learningQueue: Queue,
   ) {}
 
   async onModuleInit() {

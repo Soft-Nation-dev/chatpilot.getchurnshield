@@ -1,20 +1,21 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { generateText } from 'ai'
 import { PrismaService } from 'src/prisma/prisma.service'
+import { AiRoutingService } from 'src/ai-routing/ai-routing.service'
+import { AiWorkload } from 'src/ai-routing/ai-routing.types'
 import {
   CONTENT_SYSTEM_PROMPT,
   EDUCATIONAL_TOPICS,
   buildContentUserPrompt,
 } from '../constants/content-prompt'
 
-const CONTENT_MODEL = process.env.CONTENT_MODEL || 'gemini-3.6-flash'
-
 @Injectable()
 export class ContentGeneratorService {
   private readonly logger = new Logger(ContentGeneratorService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiRouting: AiRoutingService,
+  ) {}
 
   async generate(
     companyId: number,
@@ -48,7 +49,7 @@ export class ContentGeneratorService {
 
     const learned = await this.activeGuidelines(companyId)
 
-    const drafted = await this.draft({
+    const drafted = await this.draft(companyId, {
       kind: options.kind,
       companyName: company.name,
       property,
@@ -95,9 +96,7 @@ export class ContentGeneratorService {
       try {
         const post = await this.generate(companyId, {
           kind,
-          propertyId: useProperty
-            ? properties[i % properties.length].id
-            : null,
+          propertyId: useProperty ? properties[i % properties.length].id : null,
           autoApprove: options.autoApprove,
         })
         created.push(post)
@@ -110,7 +109,8 @@ export class ContentGeneratorService {
   }
 
   private pickTopic(seed: number): string {
-    const index = (seed + Math.floor(Date.now() / 86400000)) % EDUCATIONAL_TOPICS.length
+    const index =
+      (seed + Math.floor(Date.now() / 86400000)) % EDUCATIONAL_TOPICS.length
     return EDUCATIONAL_TOPICS[index]
   }
 
@@ -122,21 +122,20 @@ export class ContentGeneratorService {
     return row?.guidelines ?? null
   }
 
-  private async draft(input: {
-    kind: string
-    companyName: string
-    property: any
-    topic: string | null
-    learned: string | null
-    businessProfile: string | null
-  }): Promise<{ caption: string; hashtags: string }> {
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) throw new Error('GEMINI_API_KEY is not configured')
-
-    const google = createGoogleGenerativeAI({ apiKey })
-
-    const { text } = await generateText({
-      model: google(CONTENT_MODEL),
+  private async draft(
+    companyId: number,
+    input: {
+      kind: string
+      companyName: string
+      property: any
+      topic: string | null
+      learned: string | null
+      businessProfile: string | null
+    },
+  ): Promise<{ caption: string; hashtags: string }> {
+    const { text } = await this.aiRouting.generate({
+      workload: AiWorkload.Content,
+      companyId,
       system: CONTENT_SYSTEM_PROMPT,
       temperature: 0.8,
       messages: [
@@ -157,6 +156,7 @@ export class ContentGeneratorService {
           ],
         },
       ],
+      maxOutputTokens: 1000,
     })
 
     const parsed = this.parse(text)

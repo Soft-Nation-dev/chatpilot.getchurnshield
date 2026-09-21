@@ -48,7 +48,9 @@ export class DatesHelper {
     )
 
     if (diffDays === 0) return 'is today, ' + this.localWeekdayName(targetDate)
-    if (diffDays === 1) return 'is tomorrow, ' + this.localWeekdayName(targetDate)
+    if (diffDays === 1) {
+      return 'is tomorrow, ' + this.localWeekdayName(targetDate)
+    }
     if (diffDays === -1) {
       return 'was yesterday, ' + this.localWeekdayName(targetDate)
     }

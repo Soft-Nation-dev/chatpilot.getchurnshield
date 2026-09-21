@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { generateText } from 'ai'
 import { PrismaService } from 'src/prisma/prisma.service'
+import { AiRoutingService } from 'src/ai-routing/ai-routing.service'
+import { AiWorkload } from 'src/ai-routing/ai-routing.types'
 import { decryptMessagesInPlace } from 'src/common/crypto/message-crypto'
 import { AUTHOR_TYPE } from 'src/utils/constants/types'
 import {
@@ -9,7 +9,6 @@ import {
   CONVERSATION_LEARNING_PROMPT,
 } from '../constants/learning-prompt'
 
-const LEARNING_MODEL = process.env.LEARNING_MODEL || 'gemini-3.6-flash'
 const MIN_SAMPLE = Number(process.env.LEARNING_MIN_SAMPLE || 6)
 const LOOKBACK_DAYS = Number(process.env.LEARNING_LOOKBACK_DAYS || 30)
 const MAX_CONVERSATIONS = 12
@@ -19,7 +18,10 @@ const MAX_MESSAGES_PER_CONVERSATION = 24
 export class LearningService {
   private readonly logger = new Logger(LearningService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiRouting: AiRoutingService,
+  ) {}
 
   async runForAllCompanies(): Promise<{ analysed: number }> {
     const companies = await this.prisma.companies.findMany({
@@ -205,18 +207,18 @@ export class LearningService {
     system: string,
     user: string,
   ): Promise<{ guidelines: string; confidence: string } | null> {
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) return null
-
     try {
-      const google = createGoogleGenerativeAI({ apiKey })
-      const { text } = await generateText({
-        model: google(LEARNING_MODEL),
+      const { text } = await this.aiRouting.generate({
+        workload: AiWorkload.Learning,
         system,
         temperature: 0.2,
         messages: [
-          { role: 'user', content: [{ type: 'text', text: user.slice(0, 60000) }] },
+          {
+            role: 'user',
+            content: [{ type: 'text', text: user.slice(0, 60000) }],
+          },
         ],
+        maxOutputTokens: 1200,
       })
 
       const start = text.indexOf('{')

@@ -20,7 +20,17 @@ NODE_ENV=production
 FRONTEND_URL=https://chatpilot.trygetchurnshield.com
 PUBLIC_BASE_URL=https://api.trygetchurnshield.com
 WB_BASE_URL=http://whatsapp-bot:3001
+GEMINI_API_KEY=...
+GROQ_API_KEY=...
+CLOUDFLARE_ACCOUNT_ID=...
+CLOUDFLARE_API_TOKEN=...
+CLOUDFLARE_AI_GATEWAY_ID=default
 ```
+
+The API routes live WhatsApp traffic through Cloudflare Workers AI first,
+Groq second, and Gemini last. Background content, social reply, and learning
+jobs use a cheaper Cloudflare model first. Provider credentials must remain in
+the server `.env`; never add them to the Compose file or repository.
 
 The tracked production template is in `infra/hostinger`. Both services use the
 same PostgreSQL database, but only ChatPilot runs Prisma migrations. `WB` must

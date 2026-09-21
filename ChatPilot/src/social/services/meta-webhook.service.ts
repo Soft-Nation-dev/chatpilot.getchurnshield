@@ -99,7 +99,9 @@ export class MetaWebhookService {
     }
 
     for (const messaging of entry.messaging ?? []) {
-      if (messaging?.delivery || messaging?.read || messaging?.reaction) continue
+      if (messaging?.delivery || messaging?.read || messaging?.reaction) {
+        continue
+      }
       const message = messaging?.message
       if (!message || message.is_echo) continue
 
@@ -154,10 +156,7 @@ export class MetaWebhookService {
     const ownIds = await this.socialAccountService.externalIdsForCompany(
       account.company_id,
     )
-    if (
-      normalized.externalUserId &&
-      ownIds.has(normalized.externalUserId)
-    ) {
+    if (normalized.externalUserId && ownIds.has(normalized.externalUserId)) {
       return
     }
 

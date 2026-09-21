@@ -158,7 +158,9 @@ export class SocialOauthService {
     if (!secret) throw new BadRequestException('server not configured')
 
     const body = Buffer.from(JSON.stringify(payload)).toString('base64url')
-    const signature = createHmac('sha256', secret).update(body).digest('base64url')
+    const signature = createHmac('sha256', secret)
+      .update(body)
+      .digest('base64url')
     return `${body}.${signature}`
   }
 
@@ -173,7 +175,9 @@ export class SocialOauthService {
     const [body, signature] = (state || '').split('.')
     if (!body || !signature) throw new BadRequestException('invalid state')
 
-    const expected = createHmac('sha256', secret).update(body).digest('base64url')
+    const expected = createHmac('sha256', secret)
+      .update(body)
+      .digest('base64url')
     const a = Buffer.from(signature)
     const b = Buffer.from(expected)
     if (a.length !== b.length || !timingSafeEqual(a, b)) {
@@ -181,7 +185,9 @@ export class SocialOauthService {
     }
 
     try {
-      const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'))
+      const payload = JSON.parse(
+        Buffer.from(body, 'base64url').toString('utf8'),
+      )
       if (!payload?.exp || payload.exp < Date.now()) {
         throw new BadRequestException('state expired')
       }

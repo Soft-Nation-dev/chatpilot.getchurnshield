@@ -24,12 +24,14 @@ import { TeamModule } from './team/team.module'
 import { SocialModule } from './social/social.module'
 import { ContentModule } from './content/content.module'
 import { LearningModule } from './learning/learning.module'
+import { AiRoutingModule } from './ai-routing/ai-routing.module'
 
 @Module({
   imports: [
     ConfigsModule,
     ...(process.env.SENTRY_DSN ? [SentryModule.forRoot()] : []),
     PrismaModule,
+    AiRoutingModule,
 
     WebhookModule,
     BackgroundTasksModule,

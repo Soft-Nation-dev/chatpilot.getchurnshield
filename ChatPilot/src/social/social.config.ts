@@ -1,22 +1,22 @@
 function str(key: string, fallback: string): string {
-  const v = process.env[key];
-  return v === undefined || v === '' ? fallback : v;
+  const v = process.env[key]
+  return v === undefined || v === '' ? fallback : v
 }
 
 function num(key: string, fallback: number): number {
-  const v = process.env[key];
-  const n = v === undefined ? NaN : Number(v);
-  return Number.isFinite(n) ? n : fallback;
+  const v = process.env[key]
+  const n = v === undefined ? NaN : Number(v)
+  return Number.isFinite(n) ? n : fallback
 }
 
 function bool(key: string, fallback: boolean): boolean {
-  const v = process.env[key];
-  if (v === undefined || v === '') return fallback;
-  return v === 'true' || v === '1';
+  const v = process.env[key]
+  if (v === undefined || v === '') return fallback
+  return v === 'true' || v === '1'
 }
 
-const appSecret = str('META_APP_SECRET', '');
-const verifyToken = str('META_VERIFY_TOKEN', '');
+const appSecret = str('META_APP_SECRET', '')
+const verifyToken = str('META_VERIFY_TOKEN', '')
 
 export const socialConfig = {
   appId: str('META_APP_ID', ''),
@@ -36,6 +36,6 @@ export const socialConfig = {
     "Hi {company}, I saw your property post on {platform} and I'm interested. [{ref}]",
   ),
   isConfigured: !!appSecret && !!verifyToken,
-};
+}
 
-export const graphBaseUrl = `https://graph.facebook.com/${socialConfig.graphVersion}`;
+export const graphBaseUrl = `https://graph.facebook.com/${socialConfig.graphVersion}`

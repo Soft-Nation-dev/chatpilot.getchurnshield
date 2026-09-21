@@ -216,7 +216,12 @@ export class AuthService {
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
-    let user: { id: number; phone: string; otp_code: string | null; otp_expires_at: Date | null } | null
+    let user: {
+      id: number
+      phone: string
+      otp_code: string | null
+      otp_expires_at: Date | null
+    } | null
 
     try {
       user = await this.prisma.users.findUnique({
@@ -247,7 +252,12 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    let user: { id: number; phone: string; otp_code: string | null; otp_expires_at: Date | null } | null
+    let user: {
+      id: number
+      phone: string
+      otp_code: string | null
+      otp_expires_at: Date | null
+    } | null
 
     try {
       user = await this.prisma.users.findUnique({
@@ -255,7 +265,10 @@ export class AuthService {
         select: { id: true, phone: true, otp_code: true, otp_expires_at: true },
       })
     } catch (error) {
-      this.logger.error('Failed to reset password - database error', error?.message)
+      this.logger.error(
+        'Failed to reset password - database error',
+        error?.message,
+      )
       throw new UnauthorizedException(
         'Password reset is temporarily unavailable. Please try again later.',
       )

@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsNotEmpty,
   IsNumberString,
+  IsOptional,
   IsString,
   MinLength,
   validateSync,
@@ -24,10 +25,21 @@ class EnvironmentVariables {
   @MinLength(1)
   DATABASE_URL: string
 
-  @IsDefined()
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  GEMINI_API_KEY: string
+  GEMINI_API_KEY?: string
+
+  @IsOptional()
+  @IsString()
+  GROQ_API_KEY?: string
+
+  @IsOptional()
+  @IsString()
+  CLOUDFLARE_ACCOUNT_ID?: string
+
+  @IsOptional()
+  @IsString()
+  CLOUDFLARE_API_TOKEN?: string
 
   @IsDefined()
   @IsString()
@@ -57,6 +69,18 @@ export function validateConfig(configuration: Record<string, unknown>) {
       }
     }
     throw new Error(errorMessage)
+  }
+
+  const hasCloudflare =
+    !!finalConfig.CLOUDFLARE_ACCOUNT_ID && !!finalConfig.CLOUDFLARE_API_TOKEN
+  if (
+    !hasCloudflare &&
+    !finalConfig.GROQ_API_KEY &&
+    !finalConfig.GEMINI_API_KEY
+  ) {
+    throw new Error(
+      'Configure Cloudflare Workers AI, GROQ_API_KEY, or GEMINI_API_KEY. At least one AI provider is required.',
+    )
   }
 
   return finalConfig

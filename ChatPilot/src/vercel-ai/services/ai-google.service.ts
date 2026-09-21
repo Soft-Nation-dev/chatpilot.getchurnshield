@@ -1,26 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { generateText, LanguageModelUsage, stepCountIs } from 'ai'
+import { LanguageModelUsage } from 'ai'
 import { AiChatMessage, Company, Contact } from 'src/utils/constants/types'
 import { DatesHelper } from 'src/utils/services/dates.service'
-import { AiToolsService } from './ai-tools.service'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { ModelKey, ProviderKey } from 'src/common/logging/getModel'
 import { AiAssistantConfigService } from './ai-assistant-config.service'
+import { AiRoutingService } from 'src/ai-routing/ai-routing.service'
+import { AiWorkload } from 'src/ai-routing/ai-routing.types'
+import { decryptContactFields } from 'src/common/crypto/contact-crypto'
 
 @Injectable()
 export class AiGoogleService {
   private readonly logger = new Logger(AiGoogleService.name)
 
   constructor(
-    private readonly aiToolsService: AiToolsService,
     private readonly datesHelper: DatesHelper,
     private readonly aiAssistantConfigService: AiAssistantConfigService,
-  ) {
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY environment variable is required')
-    }
-  }
+    private readonly aiRoutingService: AiRoutingService,
+  ) {}
 
   /**
    * Used to Process a user message and return a response
@@ -35,8 +31,10 @@ export class AiGoogleService {
     provider: ProviderKey
   }> {
     const company = contact.companies as Company
-    const assistant =
-      await this.aiAssistantConfigService.getAssistantConfig(contact)
+    const assistant = await this.aiAssistantConfigService.getAssistantConfig(
+      contact,
+      chatHistory,
+    )
 
     try {
       if (!assistant) {
@@ -52,25 +50,31 @@ export class AiGoogleService {
           companyPhone: contact.companies.phone,
           chatHistoryLength: chatHistory,
           assistantId: company.assistant_id,
-          assistantModel: assistant.model,
+          assistantModel: 'routed',
         },
       })
 
       const nowInCompanyTimezone = this.datesHelper.localNow()
-      const systemPrompt = `
-        ${assistant.systemPrompt}
+      const systemPrompt = `${assistant.systemPrompt}
+      ${this.buildLeadMemory(contact)}
       [System message: This message was sent on ${this.datesHelper.localWeekdayName()} ${nowInCompanyTimezone}
       If you need to know the names of the upcoming days, use these values:
       ${this.datesHelper.getDateAliases()}]
       `
 
-      const { text, usage, providerMetadata, response } = await generateText({
-        model: assistant.model,
+      const result = await this.aiRoutingService.generate({
+        workload: this.hasMedia(chatHistory)
+          ? AiWorkload.MultimodalChat
+          : AiWorkload.LiveChat,
+        companyId: company.id,
+        contactId: contact.id,
+        routingKey: `contact:${contact.id}`,
         system: systemPrompt,
         tools: assistant.tools,
         temperature: assistant.temperature || 0.1,
         messages: chatHistory as any,
-        stopWhen: stepCountIs(5),
+        maxSteps: 5,
+        maxOutputTokens: 700,
       })
       this.logger.log('ai-sdk generated text response', {
         context: 'processMessage',
@@ -81,15 +85,17 @@ export class AiGoogleService {
           companyPhone: contact.companies.phone,
           chatHistoryLength: chatHistory,
           assistantId: company.assistant_id,
-          assistantModel: assistant.metadata.model,
+          assistantModel: result.model,
+          provider: result.provider,
+          fallbackIndex: result.fallbackIndex,
         },
-        result: text,
+        result: result.text,
       })
       return {
-        text,
-        usage,
-        provider: assistant.metadata.provider as ProviderKey,
-        model: assistant?.metadata.model as ModelKey,
+        text: result.text,
+        usage: result.usage,
+        provider: result.provider as ProviderKey,
+        model: result.model as ModelKey,
       }
     } catch (error) {
       this.logger.error(`ai-sdk processing message failed`, {
@@ -99,9 +105,9 @@ export class AiGoogleService {
           contactPhone: contact.phone,
           companyId: contact.companies.id,
           companyPhone: contact.companies.phone,
-          text: chatHistory,
+          chatHistoryLength: chatHistory.length,
           assistantId: company.assistant_id,
-          assistantModel: assistant?.metadata.model,
+          assistantModel: 'routed',
         },
         err: error,
       })
@@ -124,8 +130,6 @@ export class AiGoogleService {
     model: ModelKey
     provider: ProviderKey
   }> {
-    const tools = this.aiToolsService.getContactTools(contact)
-
     // Validate inputs
     if (!contact) {
       throw new Error('Contact is required')
@@ -135,24 +139,21 @@ export class AiGoogleService {
       throw new Error('System prompt is required')
     }
     try {
-      const google = createGoogleGenerativeAI({
-        apiKey: process.env.GEMINI_API_KEY,
-      })
-
-      const { text, usage, providerMetadata, response } = await generateText({
-        model: google('gemini-3.6-flash'),
+      const result = await this.aiRoutingService.generate({
+        workload: AiWorkload.LiveChat,
+        companyId: contact.companies?.id,
+        contactId: contact.id,
+        routingKey: `contact:${contact.id}`,
         system: systemPrompt,
-        tools,
-        // messages: chatHistory as any,
         prompt: prompt,
-        stopWhen: stepCountIs(5),
+        maxOutputTokens: 500,
       })
 
       this.logger.log('Successfully generated text response', {
         context: 'processPrompt',
         parameters: {
-          provider: 'google',
-          model: 'gemini-3.6-flash',
+          provider: result.provider,
+          model: result.model,
           contactId: contact?.id,
           contactPhone: contact?.phone,
           companyId: contact?.companies?.id,
@@ -160,20 +161,20 @@ export class AiGoogleService {
           prompt: prompt,
           systemPrompt: systemPrompt,
         },
-        result: text,
+        result: result.text,
       })
       return {
-        text,
-        usage,
-        provider: Object.keys(providerMetadata as any)[0] as ProviderKey,
-        model: 'gemini-3.6-flash' as ModelKey,
+        text: result.text,
+        usage: result.usage,
+        provider: result.provider as ProviderKey,
+        model: result.model as ModelKey,
       }
     } catch (error) {
       this.logger.error('process prompt failed', {
         context: 'processPrompt',
         parameters: {
-          provider: 'google',
-          model: 'gemini-3.6-flash',
+          provider: 'routed',
+          model: 'automatic',
           contactId: contact?.id,
           contactPhone: contact?.phone,
           companyId: contact?.companies?.id,
@@ -189,5 +190,34 @@ export class AiGoogleService {
         `Failed to process message with Google AI: ${error.message}`,
       )
     }
+  }
+
+  private hasMedia(messages: AiChatMessage[]): boolean {
+    return messages.some(message =>
+      message.content.some(part => part.type === 'file'),
+    )
+  }
+
+  private buildLeadMemory(contact: Contact): string {
+    const copy = decryptContactFields({ ...contact }) as Contact
+    const facts = [
+      copy.name ? `Name: ${copy.name}` : null,
+      copy.whatsapp_profile_name
+        ? `WhatsApp profile: ${copy.whatsapp_profile_name}`
+        : null,
+      copy.budget_raw ? `Budget: ${copy.budget_raw}` : null,
+      copy.property_type ? `Property type: ${copy.property_type}` : null,
+      copy.preferred_location
+        ? `Preferred location: ${copy.preferred_location}`
+        : null,
+      copy.bedrooms ? `Bedrooms: ${copy.bedrooms}` : null,
+      copy.purchase_timeline ? `Timeline: ${copy.purchase_timeline}` : null,
+      copy.payment_plan ? `Payment plan: ${copy.payment_plan}` : null,
+      copy.qualification_notes ? `Notes: ${copy.qualification_notes}` : null,
+      copy.qual_stage ? `Lead stage: ${copy.qual_stage}` : null,
+    ].filter(Boolean)
+    return facts.length
+      ? `\n## Existing lead memory\nUse these saved facts and do not ask for them again unless the buyer corrects them.\n${facts.map(fact => `- ${fact}`).join('\n')}\n`
+      : ''
   }
 }

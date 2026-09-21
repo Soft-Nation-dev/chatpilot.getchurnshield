@@ -15,6 +15,7 @@ describe('SocialReplyService', () => {
       {} as any,
       {} as any,
       graph as any,
+      {} as any,
     )
 
     await (service as any).dispatch(
@@ -43,6 +44,7 @@ describe('SocialReplyService', () => {
 
   it('never puts a WhatsApp link in an Instagram public comment fallback', () => {
     const service = new SocialReplyService(
+      {} as any,
       {} as any,
       {} as any,
       {} as any,

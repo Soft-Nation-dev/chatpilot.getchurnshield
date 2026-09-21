@@ -5,8 +5,7 @@ import { ReplyService } from 'src/background-tasks/services/reply.service'
 import { CompanyService } from 'src/company/company.service'
 import { AUTHOR_TYPE, ORIGINAL_MESSAGE_TYPE } from 'src/utils/constants/types'
 import { StorageService } from 'src/utils/services/storage.service'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { generateText } from 'ai'
+import { AiRoutingService } from 'src/ai-routing/ai-routing.service'
 import { WhatsBaileyDto } from './dto/whats-bailey.dto'
 import { WbConnectionUpdateDto } from './dto/wb-connection-update.dto'
 import { SocialAttributionService } from 'src/social/services/social-attribution.service'
@@ -31,6 +30,7 @@ export class WebhookService {
     private readonly companyService: CompanyService,
     private readonly storageService: StorageService,
     private readonly socialAttribution: SocialAttributionService,
+    private readonly aiRouting: AiRoutingService,
   ) {}
 
   private async processWebhook({
@@ -178,46 +178,33 @@ export class WebhookService {
 
   async transcribeMessage(buffer: Buffer, mimeType?: string) {
     try {
-      const google = createGoogleGenerativeAI({
-        apiKey: process.env.GEMINI_API_KEY,
-      })
-
-      const { text } = await generateText({
-        model: google('gemini-3.6-flash'),
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Transcribe this audio exactly. Return only the transcription text, nothing else.',
-              },
-              {
-                type: 'file',
-                data: buffer,
-                mediaType: this.normalizeAudioMediaType(mimeType),
-              },
-            ],
-          },
-        ],
-      })
-
-      return text
+      return await this.aiRouting.transcribeAudio(
+        buffer,
+        this.normalizeAudioMediaType(mimeType),
+      )
     } catch (error) {
       console.error('Error:', error)
       throw error
     }
   }
 
-  async updateConnectionStatus(statusDto: WbConnectionUpdateDto): Promise<string> {
-    this.logger.log('Connection status webhook received', JSON.stringify(statusDto))
+  async updateConnectionStatus(
+    statusDto: WbConnectionUpdateDto,
+  ): Promise<string> {
+    this.logger.log(
+      'Connection status webhook received',
+      JSON.stringify(statusDto),
+    )
 
-    const company = await this.companyService.findBySessionId(statusDto.sessionId)
+    const company = await this.companyService.findBySessionId(
+      statusDto.sessionId,
+    )
     if (!company) {
-      this.logger.warn('Company not found for session', { sessionId: statusDto.sessionId })
+      this.logger.warn('Company not found for session', {
+        sessionId: statusDto.sessionId,
+      })
       return 'company not found'
     }
-
 
     const connectedPhone = (statusDto.phoneNumber || '').replace(/\D/g, '')
     await this.companyService.updateCompany(company.id, {
@@ -270,7 +257,10 @@ export class WebhookService {
       !!baileyDto.hasMedia &&
       !baileyDto.isAudio &&
       !!baileyDto.mediaUrl &&
-      isImageMediaRef(baileyDto.mediaUrl, baileyDto.mediaType ?? baileyDto.mimeType)
+      isImageMediaRef(
+        baileyDto.mediaUrl,
+        baileyDto.mediaType ?? baileyDto.mimeType,
+      )
 
     if (baileyDto.isAudio) {
       baileyDto['originalMessageType'] = ORIGINAL_MESSAGE_TYPE.AUDIO
@@ -327,7 +317,9 @@ export class WebhookService {
       photoUrl: null,
       fromMe: baileyDto.fromMe,
       originalMessageType: baileyDto['originalMessageType'],
-      senderName: baileyDto.fromMe ? '' : (baileyDto['senderName'] || 'PUSH NAME'),
+      senderName: baileyDto.fromMe
+        ? ''
+        : baileyDto['senderName'] || 'PUSH NAME',
       userlid: baileyDto.userlid ? BigInt(baileyDto.userlid) : null,
       isFromLid,
       wbId: baileyDto.id ?? null,

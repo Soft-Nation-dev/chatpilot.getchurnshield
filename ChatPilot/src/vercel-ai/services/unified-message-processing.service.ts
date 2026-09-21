@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { ContactService } from 'src/contact/contact.service'
 import { Contact } from 'src/utils/constants/types'
-import { DatesHelper } from 'src/utils/services/dates.service'
 import { AiGoogleService } from 'src/vercel-ai/services/ai-google.service'
 
 const MAX_MESSAGES = 50
@@ -13,7 +12,6 @@ export class UnifiedMessageProcessingService {
   constructor(
     private readonly AiGeminiService: AiGoogleService,
     private readonly contactService: ContactService,
-    private readonly datesHelper: DatesHelper,
   ) {}
 
   async processClientMessage(
@@ -45,16 +43,7 @@ export class UnifiedMessageProcessingService {
       return null
     }
 
-    const nowInCompanyTimezone = this.datesHelper.localNow()
-    this.logger.log(`nowInCompanyTimezone: ${nowInCompanyTimezone}`)
-    const dateAugmentedText = `
-      ${text}
-      [System message: This message was sent ${this.datesHelper.localWeekdayName()} ${nowInCompanyTimezone}
-      if you need to know the names of the next days, use these values:
-      ${this.datesHelper.getDateAliases()}]
-      `
-    this.logger.log(`dateAugmentedText: ${dateAugmentedText}`)
-    this.logger.log(`Using Gemini for company ${companyId}`)
+    this.logger.log(`Routing AI request for company ${companyId}`)
 
     const chatHistory = await this.contactService.getAiChatHistoryMultimodal(
       contact.id,
@@ -65,7 +54,7 @@ export class UnifiedMessageProcessingService {
       content: [
         {
           type: 'text',
-          text: dateAugmentedText,
+          text,
         },
       ],
     })

@@ -115,11 +115,17 @@ Ask ONE question at a time. Never fire a list of questions at the client.
  * This tells the AI what files are available and when to send them.
  */
 export function buildAssetsPrompt(
-  assets: { file_url: string; file_type: string; file_name: string; description: string | null }[],
+  assets: {
+    file_url: string
+    file_type: string
+    file_name: string
+    description: string | null
+  }[],
 ): string {
   if (!assets || assets.length === 0) return ''
 
-  let prompt = '\n\n## Company Files & Media\n\nYou have the following files available to share with clients when relevant:\n\n'
+  let prompt =
+    '\n\n## Company Files & Media\n\nYou have the following files available to share with clients when relevant:\n\n'
 
   for (const asset of assets) {
     const fileType = asset.file_type.toUpperCase()
@@ -129,13 +135,25 @@ export function buildAssetsPrompt(
     prompt += `- **Type**: ${fileType}\n`
     prompt += `- **File**: ${asset.file_name}\n`
 
-    if (['image', 'jpg', 'jpeg', 'png', 'webp'].some(t => asset.file_type.toLowerCase().includes(t))) {
+    if (
+      ['image', 'jpg', 'jpeg', 'png', 'webp'].some(t =>
+        asset.file_type.toLowerCase().includes(t),
+      )
+    ) {
       prompt += `- **To send**: Use exactly this format: ![${description}](${asset.file_url})\n`
       prompt += `- **When to send**: When the client asks about or needs to see: ${description}\n\n`
-    } else if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].some(t => asset.file_type.toLowerCase().includes(t))) {
+    } else if (
+      ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].some(t =>
+        asset.file_type.toLowerCase().includes(t),
+      )
+    ) {
       prompt += `- **To send**: Use exactly this format: ![${description}](${asset.file_url})\n`
       prompt += `- **When to send**: When the client asks about or requests: ${description}\n\n`
-    } else if (['video', 'mp4', 'mov', '3gp'].some(t => asset.file_type.toLowerCase().includes(t))) {
+    } else if (
+      ['video', 'mp4', 'mov', '3gp'].some(t =>
+        asset.file_type.toLowerCase().includes(t),
+      )
+    ) {
       prompt += `- **To send**: Use exactly this format: ![${description}](${asset.file_url})\n`
       prompt += `- **When to send**: When the client asks to see a video of: ${description}\n\n`
     } else {

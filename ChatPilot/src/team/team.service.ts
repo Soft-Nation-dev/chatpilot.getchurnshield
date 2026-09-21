@@ -235,7 +235,10 @@ export class TeamService {
         `You have been invited to join ${company.name}.\n\nAccept your invitation:\n${inviteUrl}\n\nInvitation code:\n*${token}*\n\nIt expires in ${INVITE_TOKEN_TTL_HOURS} hours.`,
       )
     } catch (error) {
-      this.logger.error('Failed to deliver invite over WhatsApp', error?.message)
+      this.logger.error(
+        'Failed to deliver invite over WhatsApp',
+        error?.message,
+      )
     }
   }
 }

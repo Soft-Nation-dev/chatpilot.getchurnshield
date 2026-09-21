@@ -31,7 +31,13 @@ export class WebhookController {
   @ApiOperation({ summary: 'Update WhatsApp outbound delivery status' })
   @Post('whats-bailey/message-update')
   updateMessageStatus(
-    @Body() body: { id?: string; status?: string; at?: string; fromMe?: boolean },
+    @Body()
+    body: {
+      id?: string
+      status?: string
+      at?: string
+      fromMe?: boolean
+    },
   ) {
     return this.webhookService.updateMessageStatus(body)
   }

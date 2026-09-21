@@ -10,7 +10,9 @@ const STRONG_PASSWORD =
   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/
 
 @ValidatorConstraint({ name: 'isStrongPassword', async: false })
-export class IsStrongPasswordConstraint implements ValidatorConstraintInterface {
+export class IsStrongPasswordConstraint
+  implements ValidatorConstraintInterface
+{
   validate(value: unknown): boolean {
     return typeof value === 'string' && STRONG_PASSWORD.test(value)
   }

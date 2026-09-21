@@ -23,7 +23,14 @@ const AREA_TO_STATE: Record<string, string[]> = {
     'epe',
     'lagos',
   ],
-  Enugu: ['independence layout', 'new haven', 'thinkers corner', 'trans ekulu', 'achara layout', 'enugu'],
+  Enugu: [
+    'independence layout',
+    'new haven',
+    'thinkers corner',
+    'trans ekulu',
+    'achara layout',
+    'enugu',
+  ],
   Abuja: [
     'maitama',
     'gwarinpa',
@@ -49,15 +56,15 @@ const AREA_TO_STATE: Record<string, string[]> = {
   Delta: ['asaba', 'warri'],
   Edo: ['benin city'],
   Kano: ['kano'],
-};
+}
 
 export function parseState(text: string | null | undefined): string | null {
-  if (!text) return null;
-  const t = text.toLowerCase();
+  if (!text) return null
+  const t = text.toLowerCase()
   for (const [state, areas] of Object.entries(AREA_TO_STATE)) {
     for (const area of areas) {
-      if (t.includes(area)) return state;
+      if (t.includes(area)) return state
     }
   }
-  return null;
+  return null
 }

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { generateText } from 'ai'
 import { PrismaService } from 'src/prisma/prisma.service'
+import { AiRoutingService } from 'src/ai-routing/ai-routing.service'
+import { AiWorkload } from 'src/ai-routing/ai-routing.types'
 import { decryptMessage } from 'src/common/crypto/message-crypto'
 import { socialConfig } from '../social.config'
 import {
@@ -27,6 +27,7 @@ export class SocialReplyService {
     private readonly intentClassifier: IntentClassifierService,
     private readonly waLink: WaLinkService,
     private readonly graph: GraphApiService,
+    private readonly aiRouting: AiRoutingService,
   ) {}
 
   async handleEvent(eventId: number): Promise<string> {
@@ -212,13 +213,9 @@ export class SocialReplyService {
     context: string | null
   }): Promise<string> {
     const fallback = this.fallbackReply(input)
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) return fallback
-
     try {
-      const google = createGoogleGenerativeAI({ apiKey })
-      const { text } = await generateText({
-        model: google(socialConfig.intentModel),
+      const result = await this.aiRouting.generate({
+        workload: AiWorkload.Social,
         system: SOCIAL_REPLY_SYSTEM_PROMPT,
         temperature: 0.35,
         messages: [
@@ -242,8 +239,9 @@ export class SocialReplyService {
             ],
           },
         ],
+        maxOutputTokens: 250,
       })
-      const reply = this.parseReply(text)
+      const reply = this.parseReply(result.text)
       if (!reply) return fallback
       if (
         input.platform === SOCIAL_PLATFORM.INSTAGRAM &&
@@ -252,11 +250,13 @@ export class SocialReplyService {
       ) {
         return fallback
       }
-      const limit =
-        input.eventType === SOCIAL_EVENT_TYPE.COMMENT ? 280 : 500
+      const limit = input.eventType === SOCIAL_EVENT_TYPE.COMMENT ? 280 : 500
       return reply.slice(0, limit)
     } catch (error) {
-      this.logger.error('Contextual social reply generation failed', error?.message)
+      this.logger.error(
+        'Contextual social reply generation failed',
+        error?.message,
+      )
       return fallback
     }
   }
@@ -296,14 +296,18 @@ export class SocialReplyService {
     const end = raw.lastIndexOf('}')
     if (start === -1 || end <= start) return null
     try {
-      const reply = String(JSON.parse(raw.slice(start, end + 1)).reply || '').trim()
+      const reply = String(
+        JSON.parse(raw.slice(start, end + 1)).reply || '',
+      ).trim()
       return reply ? reply.slice(0, 500) : null
     } catch {
       return null
     }
   }
 
-  private async replyContext(contentPostId: number | null): Promise<string | null> {
+  private async replyContext(
+    contentPostId: number | null,
+  ): Promise<string | null> {
     if (!contentPostId) return null
     const post = await this.prisma.content_posts.findUnique({
       where: { id: contentPostId },
@@ -323,7 +327,9 @@ export class SocialReplyService {
       if (property.title_document) {
         facts.push(`Title document: ${property.title_document}`)
       }
-      if (property.payment_plan) facts.push(`Payment plan: ${property.payment_plan}`)
+      if (property.payment_plan) {
+        facts.push(`Payment plan: ${property.payment_plan}`)
+      }
       facts.push(`Availability: ${property.status}`)
     }
     facts.push(`Published post: ${post.caption.slice(0, 700)}`)

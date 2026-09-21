@@ -21,7 +21,13 @@ import { FileInterceptor } from '@nestjs/platform-express'
 import { CompanyService } from './company.service'
 import { CompanyAccessService } from './company-access.service'
 import { CreateCompanyDto } from './dto/create-company.dto'
-import { ApiBody, ApiHeader, ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger'
+import {
+  ApiBody,
+  ApiHeader,
+  ApiOperation,
+  ApiTags,
+  ApiBearerAuth,
+} from '@nestjs/swagger'
 import { Response } from 'express'
 import { ContactService } from 'src/contact/contact.service'
 import { ContactRedactionService } from 'src/contact/contact-redaction.service'
@@ -181,7 +187,11 @@ export class CompanyController {
     @Body() body: { usePairingCode?: boolean; phoneNumber?: string },
   ) {
     await this.verifyOwnership(req.user.userId, id)
-    return await this.companyService.createSession(id, body?.usePairingCode, body?.phoneNumber)
+    return await this.companyService.createSession(
+      id,
+      body?.usePairingCode,
+      body?.phoneNumber,
+    )
   }
 
   @ApiOperation({ summary: 'Get pairing code for Company session' })
@@ -244,7 +254,9 @@ export class CompanyController {
     return this.companyService.sendDeleteOtp(id)
   }
 
-  @ApiOperation({ summary: 'Delete company and all related data (requires OTP)' })
+  @ApiOperation({
+    summary: 'Delete company and all related data (requires OTP)',
+  })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
@@ -304,40 +316,60 @@ export class CompanyController {
     @Body() body: { is_bot_activated: boolean },
   ) {
     await this.verifyOwnership(req.user.userId, id)
-    return this.companyService.setBotActivation(
-      id,
-      body.is_bot_activated,
-    )
+    return this.companyService.setBotActivation(id, body.is_bot_activated)
   }
 
-  @ApiOperation({ summary: 'Get company settings (email, monthly lead quota, profile)' })
+  @ApiOperation({
+    summary: 'Get company settings (email, monthly lead quota, profile)',
+  })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Get(':id/company-settings')
-  async getCompanySettings(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+  async getCompanySettings(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     await this.verifyOwnership(req.user.userId, id)
     const company = await this.companyService.findById(id)
     if (!company) throw new UnprocessableEntityException('company not found')
     return company
   }
 
-  @ApiOperation({ summary: 'Update company settings (email, monthly lead quota)' })
+  @ApiOperation({
+    summary: 'Update company settings (email, monthly lead quota)',
+  })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Put(':id/company-settings')
   async updateCompanySettings(
     @Request() req: any,
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { email?: string; monthly_lead_quota?: number; daily_lead_limit?: number },
+    @Body()
+    body: {
+      email?: string
+      monthly_lead_quota?: number
+      daily_lead_limit?: number
+    },
   ) {
     await this.verifyOwnership(req.user.userId, id)
     const data: any = {}
-    if (body.email !== undefined) data.email = body.email === '' ? null : body.email
-    if (body.monthly_lead_quota !== undefined && body.monthly_lead_quota !== null) {
-      data.monthly_lead_quota = Math.max(0, Math.floor(Number(body.monthly_lead_quota)) || 0)
+    if (body.email !== undefined) {
+      data.email = body.email === '' ? null : body.email
+    }
+    if (
+      body.monthly_lead_quota !== undefined &&
+      body.monthly_lead_quota !== null
+    ) {
+      data.monthly_lead_quota = Math.max(
+        0,
+        Math.floor(Number(body.monthly_lead_quota)) || 0,
+      )
     }
     if (body.daily_lead_limit !== undefined && body.daily_lead_limit !== null) {
-      data.daily_lead_limit = Math.max(0, Math.floor(Number(body.daily_lead_limit)) || 0)
+      data.daily_lead_limit = Math.max(
+        0,
+        Math.floor(Number(body.daily_lead_limit)) || 0,
+      )
     }
     return this.companyService.updateCompany(id, data)
   }
@@ -416,10 +448,7 @@ export class CompanyController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Get(':id/assets')
-  async getAssets(
-    @Request() req: any,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  async getAssets(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     await this.verifyOwnership(req.user.userId, id)
     return this.companyService.getAssets(id)
   }
@@ -435,7 +464,11 @@ export class CompanyController {
     @Body() body: { description: string },
   ) {
     await this.verifyOwnership(req.user.userId, id)
-    return this.companyService.updateAssetDescription(id, assetId, body.description)
+    return this.companyService.updateAssetDescription(
+      id,
+      assetId,
+      body.description,
+    )
   }
 
   @ApiOperation({ summary: 'Delete a company asset' })
@@ -476,11 +509,9 @@ export class CompanyController {
   ) {
     await this.verifyOwnership(req.user.userId, id)
     const contact = await this.contactService.getContactById(contactId)
-    if (!contact)
-      throw new UnprocessableEntityException('contact not found')
+    if (!contact) throw new UnprocessableEntityException('contact not found')
     const company = await this.companyService.findById(id)
-    if (!company)
-      throw new UnprocessableEntityException('company not found')
+    if (!company) throw new UnprocessableEntityException('company not found')
 
     const contentParts = this.WaFormattingService.splitMessage(body.message)
     const messages: any = []

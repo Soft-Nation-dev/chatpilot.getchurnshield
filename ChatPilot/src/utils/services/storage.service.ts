@@ -5,7 +5,9 @@ import { dirname, join, resolve } from 'node:path'
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name)
-  private readonly uploadsDir = resolve(process.env.UPLOADS_DIR || '/app/uploads')
+  private readonly uploadsDir = resolve(
+    process.env.UPLOADS_DIR || '/app/uploads',
+  )
   private readonly publicBaseUrl = (
     process.env.PUBLIC_BASE_URL || 'http://localhost:3000'
   ).replace(/\/+$/, '')
@@ -28,11 +30,13 @@ export class StorageService {
     'text/plain': 'txt',
     'application/pdf': 'pdf',
     'application/msword': 'doc',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+      'docx',
     'application/vnd.ms-excel': 'xls',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
     'application/vnd.ms-powerpoint': 'ppt',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+      'pptx',
   }
 
   private safeSegment(value: string): string {
@@ -111,10 +115,15 @@ export class StorageService {
   ): Promise<string | null> {
     try {
       const timestamp = Date.now()
-      const segments = fileName.split('/').filter(Boolean).map(s => this.safeSegment(s))
+      const segments = fileName
+        .split('/')
+        .filter(Boolean)
+        .map(s => this.safeSegment(s))
       const last = segments.pop() || 'file'
       const bucket = this.safeSegment(bucketName)
-      const relativePath = [bucket, ...segments, `${timestamp}-${last}`].join('/')
+      const relativePath = [bucket, ...segments, `${timestamp}-${last}`].join(
+        '/',
+      )
 
       return await this.persist(relativePath, fileBuffer)
     } catch (error) {

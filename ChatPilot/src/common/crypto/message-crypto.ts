@@ -1,5 +1,9 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
-
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from 'node:crypto'
 
 const PREFIX = 'enc:v1:'
 const ALGO = 'aes-256-gcm'
@@ -22,20 +26,25 @@ function getKey(): Buffer {
 
 export function encryptMessage(plain: string | null | undefined): string {
   if (plain == null || plain === '') return plain as string
-  
+
   if (typeof plain === 'string' && plain.startsWith(PREFIX)) return plain
 
   const iv = randomBytes(IV_LEN)
   const cipher = createCipheriv(ALGO, getKey(), iv)
-  const ciphertext = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()])
+  const ciphertext = Buffer.concat([
+    cipher.update(plain, 'utf8'),
+    cipher.final(),
+  ])
   const authTag = cipher.getAuthTag()
   return `${PREFIX}${iv.toString('base64')}:${authTag.toString('base64')}:${ciphertext.toString('base64')}`
 }
 
 export function decryptMessage(stored: string | null | undefined): string {
   if (stored == null || stored === '') return stored as string
- 
-  if (typeof stored !== 'string' || !stored.startsWith(PREFIX)) return stored as string
+
+  if (typeof stored !== 'string' || !stored.startsWith(PREFIX)) {
+    return stored as string
+  }
 
   const body = stored.slice(PREFIX.length)
   const [ivB64, tagB64, ctB64] = body.split(':')
@@ -52,7 +61,6 @@ export function decryptMessage(stored: string | null | undefined): string {
     const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()])
     return plain.toString('utf8')
   } catch {
-    
     return stored
   }
 }

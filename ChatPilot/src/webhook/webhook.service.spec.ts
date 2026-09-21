@@ -1,15 +1,17 @@
-import { Test, TestingModule } from '@nestjs/testing'
 import { WebhookService } from './webhook.service'
 
 describe('WebhookService', () => {
   let service: WebhookService
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [WebhookService],
-    }).compile()
-
-    service = module.get<WebhookService>(WebhookService)
+  beforeEach(() => {
+    service = new WebhookService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    )
   })
 
   it('should be defined', () => {

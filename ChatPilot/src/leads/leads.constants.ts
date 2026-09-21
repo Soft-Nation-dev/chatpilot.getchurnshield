@@ -1,4 +1,4 @@
-export const LEADS_OUTREACH_QUEUE = 'leads-outreach';
+export const LEADS_OUTREACH_QUEUE = 'leads-outreach'
 
 export enum LeadJobKind {
   MANUAL = 'manual',

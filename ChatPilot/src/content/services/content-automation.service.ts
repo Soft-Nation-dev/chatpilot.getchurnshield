@@ -118,9 +118,7 @@ export class ContentAutomationService {
       where: {
         company_id: companyId,
         status: 'available',
-        ...(needsImage
-          ? { image_urls: { not: null } }
-          : {}),
+        ...(needsImage ? { image_urls: { not: null } } : {}),
       },
       orderBy: { created_at: 'asc' },
     })
@@ -140,11 +138,17 @@ export class ContentAutomationService {
     const recentIds = new Set(
       recentlyUsed.map(row => row.property_id).filter(Boolean) as number[],
     )
-    const freshProperties = usableProperties.filter(row => !recentIds.has(row.id))
-    const propertyPool = freshProperties.length ? freshProperties : usableProperties
+    const freshProperties = usableProperties.filter(
+      row => !recentIds.has(row.id),
+    )
+    const propertyPool = freshProperties.length
+      ? freshProperties
+      : usableProperties
 
-    const times = this.stringArray(settings.posting_times, DEFAULT_TIMES)
-      .slice(0, settings.posts_per_day)
+    const times = this.stringArray(settings.posting_times, DEFAULT_TIMES).slice(
+      0,
+      settings.posts_per_day,
+    )
     while (times.length < settings.posts_per_day) {
       times.push(DEFAULT_TIMES[times.length] ?? '20:00')
     }
@@ -154,9 +158,16 @@ export class ContentAutomationService {
 
     const now = new Date()
     const localDate = formatInTimeZone(now, settings.timezone, 'yyyy-MM-dd')
-    const nextLocalDate = formatInTimeZone(addDays(now, 1), settings.timezone, 'yyyy-MM-dd')
+    const nextLocalDate = formatInTimeZone(
+      addDays(now, 1),
+      settings.timezone,
+      'yyyy-MM-dd',
+    )
     const dayStart = fromZonedTime(`${localDate}T00:00:00`, settings.timezone)
-    const nextDayStart = fromZonedTime(`${nextLocalDate}T00:00:00`, settings.timezone)
+    const nextDayStart = fromZonedTime(
+      `${nextLocalDate}T00:00:00`,
+      settings.timezone,
+    )
     const expired = await this.prisma.content_posts.deleteMany({
       where: {
         company_id: companyId,
@@ -169,7 +180,9 @@ export class ContentAutomationService {
       },
     })
     if (expired.count) {
-      this.logger.log(`Removed ${expired.count} expired automatic draft(s) for company ${companyId}`)
+      this.logger.log(
+        `Removed ${expired.count} expired automatic draft(s) for company ${companyId}`,
+      )
     }
 
     const slots: Array<{ scheduledAt: Date; sourceIndex: number }> = []
@@ -202,20 +215,28 @@ export class ContentAutomationService {
         continue
       }
       if (source === 'profile' && !businessProfile) {
-        skipped.push('Profile draft skipped: add a business description in Setup or Settings.')
+        skipped.push(
+          'Profile draft skipped: add a business description in Setup or Settings.',
+        )
         continue
       }
 
       const property =
         source === 'property'
-          ? propertyPool[(companyId + Math.floor(Date.now() / 86400000)) % propertyPool.length]
+          ? propertyPool[
+              (companyId + Math.floor(Date.now() / 86400000)) %
+                propertyPool.length
+            ]
           : null
       const kind =
         source === 'property'
           ? 'showcase'
           : source === 'profile'
             ? 'profile'
-            : randomKinds[(companyId + Math.floor(Date.now() / 86400000)) % randomKinds.length]
+            : randomKinds[
+                (companyId + Math.floor(Date.now() / 86400000)) %
+                  randomKinds.length
+              ]
 
       const post = await this.generator.generate(companyId, {
         kind,
@@ -228,7 +249,12 @@ export class ContentAutomationService {
       created.push(post)
     }
 
-    return { created: created.length, deleted: expired.count, posts: created, skipped }
+    return {
+      created: created.length,
+      deleted: expired.count,
+      posts: created,
+      skipped,
+    }
   }
 
   private businessProfile(value: unknown): string | null {

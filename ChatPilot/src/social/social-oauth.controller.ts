@@ -11,7 +11,12 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common'
-import { ApiBearerAuth, ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger'
+import {
+  ApiBearerAuth,
+  ApiExcludeEndpoint,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger'
 import { Response } from 'express'
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard'
 import { RolesGuard } from 'src/auth/guards/roles.guard'
@@ -138,7 +143,10 @@ export class SocialOauthController {
     const target = accounts.find(a => a.id === accountId)
     if (!target) return { disconnected: false }
 
-    await this.socialAccountService.deactivate(accountId, 'disconnected by owner')
+    await this.socialAccountService.deactivate(
+      accountId,
+      'disconnected by owner',
+    )
     return { disconnected: true }
   }
 }

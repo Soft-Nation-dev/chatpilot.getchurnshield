@@ -25,20 +25,42 @@ export class ReplyProcessor extends WorkerHost {
     const contactMessagesList = contact?.messages
     const replyMessages: any = []
 
-    this.contactService.mockTypingState(contact as Contact)
-    if (contact) {
+    if (!contact) {
+      this.logger.error('Contact not found')
+      return {
+        messagesProcessed: contactMessagesList,
+        generatedReplies: replyMessages,
+      }
+    }
+
+    await this.contactService.mockTypingState(contact as Contact)
+    try {
       if (contact.messages.length > 0) {
         const company = contact.companies as Company
         const combinedMessages = this.formatMessage(contact.messages)
         this.logger.log(`combinedMessages: ${combinedMessages}`)
 
-        const openAIMessage =
-          await this.messageProcessingService.processClientMessage(
-            contact as any,
-            combinedMessages,
-            contact?.companies?.id as number,
-            false, // isUnauthorized
+        let openAIMessage: string | null
+        try {
+          openAIMessage =
+            await this.messageProcessingService.processClientMessage(
+              contact as any,
+              combinedMessages,
+              contact?.companies?.id as number,
+              false, // isUnauthorized
+            )
+        } catch (error) {
+          this.logger.error(
+            `All AI providers failed for contact ${contact.id}`,
+            error instanceof Error ? error.stack : String(error),
           )
+          openAIMessage =
+            process.env.AI_UNAVAILABLE_REPLY ||
+            'Thanks for your message. Our assistant is temporarily unavailable, so I have flagged this conversation for a team member to follow up.'
+          await this.contactService.updateContact(contact.id, {
+            needs_review: true,
+          })
+        }
 
         this.logger.log(`open AI Message ===> ${contact.phone} `, {
           openAIMessage,
@@ -78,10 +100,10 @@ export class ReplyProcessor extends WorkerHost {
       } else {
         this.logger.log(`message processing not required `)
       }
-    } else {
-      this.logger.error('Contact not found')
+    } finally {
+      await this.contactService.clearTypingState(contact as Contact)
     }
-    this.contactService.clearTypingState(contact as Contact)
+
     return {
       messagesProcessed: contactMessagesList,
       generatedReplies: replyMessages,

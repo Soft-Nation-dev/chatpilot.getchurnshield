@@ -19,7 +19,9 @@ export class ContentProcessor extends WorkerHost {
   async process(job: Job): Promise<any> {
     if (job.name === 'plan-drafts') {
       const created = await this.automation.planAll()
-      if (created) this.logger.log(`Created ${created} automatic content draft(s)`)
+      if (created) {
+        this.logger.log(`Created ${created} automatic content draft(s)`)
+      }
       return { created }
     }
 

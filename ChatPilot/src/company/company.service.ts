@@ -12,8 +12,8 @@ import { companies } from '@prisma/client'
 import { Company } from 'src/utils/constants/types'
 import { WhatsBaileyService } from 'src/utils/services/whats-bailey.service'
 import { StorageService } from 'src/utils/services/storage.service'
-import { generateText } from 'ai'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { AiRoutingService } from 'src/ai-routing/ai-routing.service'
+import { AiWorkload } from 'src/ai-routing/ai-routing.types'
 import { decryptMessagesInPlace } from 'src/common/crypto/message-crypto'
 import {
   decryptContactFields,
@@ -31,6 +31,7 @@ export class CompanyService {
     @Inject(forwardRef(() => WhatsBaileyService))
     private readonly whatsBaileyService: WhatsBaileyService,
     private readonly storageService: StorageService,
+    private readonly aiRouting: AiRoutingService,
   ) {}
 
   async findByPhone(targetPhone: number | string | bigint) {
@@ -76,12 +77,18 @@ export class CompanyService {
     })
   }
 
-  async createSession(companyId: number, usePairingCode?: boolean, phoneNumber?: string) {
+  async createSession(
+    companyId: number,
+    usePairingCode?: boolean,
+    phoneNumber?: string,
+  ) {
     const company = await this.findById(companyId)
     if (!company) throw new UnprocessableEntityException('company not found')
 
     if (usePairingCode && !phoneNumber) {
-      throw new UnprocessableEntityException('Phone number is required when using pairing code')
+      throw new UnprocessableEntityException(
+        'Phone number is required when using pairing code',
+      )
     }
 
     if (usePairingCode) {
@@ -106,14 +113,20 @@ export class CompanyService {
       // Remove stale session so fresh QR is generated
       try {
         await this.whatsBaileyService.removeSession(company)
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
       await this.updateCompany(company.id, {
         session_id: null,
         whatsapp_connection_status: false,
       } as any)
     }
 
-    const session = await this.whatsBaileyService.startSession(company, usePairingCode, phoneNumber)
+    const session = await this.whatsBaileyService.startSession(
+      company,
+      usePairingCode,
+      phoneNumber,
+    )
     this.logger.log(`${session.success}`, 'company service')
     if (!session.success) {
       throw new UnprocessableEntityException(session.message)
@@ -152,7 +165,10 @@ export class CompanyService {
     })) as Company
   }
 
-  async setBotActivation(companyId: number, isActive: boolean): Promise<Company> {
+  async setBotActivation(
+    companyId: number,
+    isActive: boolean,
+  ): Promise<Company> {
     if (!isActive) {
       return this.updateCompany(companyId, { is_bot_activated: false } as any)
     }
@@ -182,7 +198,11 @@ export class CompanyService {
     if (!company) throw new UnprocessableEntityException('company not found')
     if (!company.session_id) {
       res.setHeader('Content-Type', 'application/json')
-      return res.send({ statusCode: 200, data: null, message: 'No active session. Please create a session first.' })
+      return res.send({
+        statusCode: 200,
+        data: null,
+        message: 'No active session. Please create a session first.',
+      })
     }
     return await this.whatsBaileyService.getSessionQrCode(res, company)
   }
@@ -190,7 +210,11 @@ export class CompanyService {
     const company = await this.findById(companyId)
     if (!company) throw new UnprocessableEntityException('company not found')
     if (!company.session_id) {
-      return { success: false, state: 'DISCONNECTED', message: 'No active session' }
+      return {
+        success: false,
+        state: 'DISCONNECTED',
+        message: 'No active session',
+      }
     }
     return await this.whatsBaileyService.getSessionStatus(company)
   }
@@ -289,18 +313,16 @@ export class CompanyService {
       )
     }
 
-    const google = createGoogleGenerativeAI({
-      apiKey: process.env.GEMINI_API_KEY,
-    })
-
-    const { text: generatedPrompt } = await generateText({
-      model: google('gemini-3.6-flash'),
+    const { text: generatedPrompt } = await this.aiRouting.generate({
+      workload: AiWorkload.Prompt,
+      companyId,
       prompt: `You are an expert at creating WhatsApp business chatbot system prompts. Based on the following business description, generate a comprehensive system prompt for a WhatsApp AI assistant. The prompt should define the bot's personality, knowledge, and behavior.
 
 Business Description:
 ${details.description}
 
 Generate ONLY the system prompt text, no explanations.`,
+      maxOutputTokens: 1600,
     })
 
     if (company.assistant_id) {
@@ -475,7 +497,9 @@ Generate ONLY the system prompt text, no explanations.`,
     const user = await this.prisma.users.findFirst({
       where: { company_id: companyId },
     })
-    if (!user) throw new UnprocessableEntityException('No user found for this company')
+    if (!user) {
+      throw new UnprocessableEntityException('No user found for this company')
+    }
 
     await this.prisma.users.update({
       where: { id: user.id },
@@ -505,7 +529,9 @@ Generate ONLY the system prompt text, no explanations.`,
       where: { company_id: companyId },
       select: { id: true, otp_code: true, otp_expires_at: true },
     })
-    if (!user) throw new UnprocessableEntityException('No user found for this company')
+    if (!user) {
+      throw new UnprocessableEntityException('No user found for this company')
+    }
 
     if (
       !user.otp_code ||
@@ -526,13 +552,16 @@ Generate ONLY the system prompt text, no explanations.`,
       try {
         await this.whatsBaileyService.removeSession(company)
       } catch (e) {
-        this.logger.warn('Failed to remove WhatsApp session during company deletion', e?.message)
+        this.logger.warn(
+          'Failed to remove WhatsApp session during company deletion',
+          e?.message,
+        )
       }
     }
 
     const assistantId = company.assistant_id
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async tx => {
       const contacts = await tx.contacts.findMany({
         where: { company_id: companyId },
         select: { id: true },
@@ -566,7 +595,10 @@ Generate ONLY the system prompt text, no explanations.`,
       }
     })
 
-    return { success: true, message: 'Company and all related data deleted successfully' }
+    return {
+      success: true,
+      message: 'Company and all related data deleted successfully',
+    }
   }
 
   // ─── Company Assets (File Upload) ──────────────────────────────
@@ -629,7 +661,11 @@ Generate ONLY the system prompt text, no explanations.`,
     return { success: true }
   }
 
-  async updateAssetDescription(companyId: number, assetId: number, description: string) {
+  async updateAssetDescription(
+    companyId: number,
+    assetId: number,
+    description: string,
+  ) {
     const asset = await this.prisma.company_assets.findFirst({
       where: { id: assetId, company_id: companyId },
     })
@@ -649,8 +685,12 @@ Generate ONLY the system prompt text, no explanations.`,
     if (mimetype.startsWith('video/')) return 'video'
     if (mimetype === 'application/pdf') return 'pdf'
     if (mimetype.includes('word') || mimetype.includes('document')) return 'doc'
-    if (mimetype.includes('excel') || mimetype.includes('spreadsheet')) return 'xls'
-    if (mimetype.includes('powerpoint') || mimetype.includes('presentation')) return 'ppt'
+    if (mimetype.includes('excel') || mimetype.includes('spreadsheet')) {
+      return 'xls'
+    }
+    if (mimetype.includes('powerpoint') || mimetype.includes('presentation')) {
+      return 'ppt'
+    }
 
     // Fallback to extension
     const ext = filename.split('.').pop()?.toLowerCase() || ''

@@ -318,9 +318,7 @@ export class AiToolsService {
         inputSchema: z.object({
           startDate: z
             .string()
-            .describe(
-              'Start date in YYYY-MM-DD format for the search range.',
-            ),
+            .describe('Start date in YYYY-MM-DD format for the search range.'),
           endDate: z
             .string()
             .describe('End date in YYYY-MM-DD format for the search range.'),
@@ -337,12 +335,11 @@ export class AiToolsService {
               },
             })
 
-            const result =
-              await this.calComService.getAvailableAppointments(
-                company,
-                startDate,
-                endDate,
-              )
+            const result = await this.calComService.getAvailableAppointments(
+              company,
+              startDate,
+              endDate,
+            )
 
             if (typeof result === 'string') {
               return result
@@ -713,7 +710,9 @@ export class AiToolsService {
                 qual_stage: stage,
                 ...(score === undefined
                   ? {}
-                  : { lead_score: Math.max(0, Math.min(100, Math.round(score))) }),
+                  : {
+                      lead_score: Math.max(0, Math.min(100, Math.round(score))),
+                    }),
               },
             )
             this.logger.log('tool call finished', {

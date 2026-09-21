@@ -1,12 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { CreateCompanyDto } from '../company/dto/create-company.dto'
-import {
-  companies,
-  contacts,
-  messages,
-  Prisma,
-} from '@prisma/client'
+import { companies, contacts, messages, Prisma } from '@prisma/client'
 import {
   AUTHOR_TYPE,
   AiChatMessage,
@@ -167,7 +162,13 @@ export class ContactService {
       : ORIGINAL_MESSAGE_TYPE.TEXT
     const isFromLid = !self.phone && !!self.lid
     const sendNumber = self.phone ? Number(self.phone) : Number(self.lid)
-    const wbId = await this._sendMessage(self, sendNumber, text, mediaUrl, isFromLid)
+    const wbId = await this._sendMessage(
+      self,
+      sendNumber,
+      text,
+      mediaUrl,
+      isFromLid,
+    )
     await this.saveOutgoingMessage(
       self,
       text,
@@ -212,7 +213,14 @@ export class ContactService {
     const company: Company = self.companies
 
     if (company) {
-      return await this.whatsBailey.sendMessage(company, phone, text, imageUrl, undefined, isFromLid)
+      return await this.whatsBailey.sendMessage(
+        company,
+        phone,
+        text,
+        imageUrl,
+        undefined,
+        isFromLid,
+      )
     }
     return null
   }
@@ -221,7 +229,7 @@ export class ContactService {
     contactId: number,
     onlyProcessed: boolean = false,
   ): Promise<AiChatMessage[]> {
-    const messages = await this.getAllMessages(contactId, onlyProcessed)
+    const messages = await this.getRecentMessages(contactId, onlyProcessed)
     const chatHistory = messages.map(msg => ({
       role: msg.author_type === AUTHOR_TYPE.HUMAN ? 'user' : 'assistant',
       content: [
@@ -238,7 +246,7 @@ export class ContactService {
     contactId: number,
     onlyProcessed: boolean = false,
   ): Promise<AiChatMessage[]> {
-    const messages = await this.getAllMessages(contactId, onlyProcessed)
+    const messages = await this.getRecentMessages(contactId, onlyProcessed)
     const budget = Number(process.env.AI_MAX_IMAGE_PARTS || 4)
 
     const attachable = new Set<number>()
@@ -289,6 +297,26 @@ export class ContactService {
         sent_at: 'asc',
       },
     })
+    return decryptMessagesInPlace(messages)
+  }
+
+  private async getRecentMessages(
+    contactId: number,
+    onlyProcessed: boolean = false,
+  ) {
+    const configured = Number(process.env.AI_MAX_HISTORY_MESSAGES || 12)
+    const limit = Number.isFinite(configured)
+      ? Math.max(4, Math.min(30, Math.floor(configured)))
+      : 12
+    const messages = await this.prisma.messages.findMany({
+      where: {
+        contact_id: contactId,
+        ...(onlyProcessed ? { processed: onlyProcessed } : {}),
+      },
+      orderBy: { sent_at: 'desc' },
+      take: limit,
+    })
+    messages.reverse()
     return decryptMessagesInPlace(messages)
   }
 

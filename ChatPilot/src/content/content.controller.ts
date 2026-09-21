@@ -161,13 +161,21 @@ export class ContentController {
         company_id: companyId,
         content_post_id: postId,
         event_type: 'comment',
-        ...(Number.isSafeInteger(cursor) && cursor > 0 ? { id: { lt: cursor } } : {}),
+        ...(Number.isSafeInteger(cursor) && cursor > 0
+          ? { id: { lt: cursor } }
+          : {}),
       },
       orderBy: { id: 'desc' },
       take: 51,
       select: {
-        id: true, platform: true, external_user_name: true, text: true,
-        reply_text: true, action: true, created_at: true, updated_at: true,
+        id: true,
+        platform: true,
+        external_user_name: true,
+        text: true,
+        reply_text: true,
+        action: true,
+        created_at: true,
+        updated_at: true,
         social_account_id: true,
       },
     })
@@ -175,7 +183,11 @@ export class ContentController {
     const accounts = await this.prisma.social_accounts.findMany({
       where: {
         company_id: companyId,
-        id: { in: page.map(row => row.social_account_id).filter((id): id is number => id !== null) },
+        id: {
+          in: page
+            .map(row => row.social_account_id)
+            .filter((id): id is number => id !== null),
+        },
       },
       select: { id: true, name: true, username: true },
     })
@@ -185,10 +197,17 @@ export class ContentController {
     }
     return {
       items: page.map(row => ({
-        id: row.id, platform: row.platform, author: row.external_user_name,
-        text: readable(row.text), reply: readable(row.reply_text),
-        action: row.action, created_at: row.created_at, updated_at: row.updated_at,
-        account: accounts.find(account => account.id === row.social_account_id) ?? null,
+        id: row.id,
+        platform: row.platform,
+        author: row.external_user_name,
+        text: readable(row.text),
+        reply: readable(row.reply_text),
+        action: row.action,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        account:
+          accounts.find(account => account.id === row.social_account_id) ??
+          null,
       })),
       next_cursor: rows.length > 50 ? page[page.length - 1].id : null,
     }

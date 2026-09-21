@@ -34,7 +34,10 @@ export class WaLinkService {
 
     const prefill = template
       .replace('{company}', company.name)
-      .replace('{platform}', platform === 'instagram' ? 'Instagram' : 'Facebook')
+      .replace(
+        '{platform}',
+        platform === 'instagram' ? 'Instagram' : 'Facebook',
+      )
       .replace('{ref}', refCode)
 
     return `https://wa.me/${digits}?text=${encodeURIComponent(prefill)}`

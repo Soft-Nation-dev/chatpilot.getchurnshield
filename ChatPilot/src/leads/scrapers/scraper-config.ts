@@ -1,27 +1,27 @@
 function str(key: string, fallback: string): string {
-  const v = process.env[key];
-  return v === undefined || v === '' ? fallback : v;
+  const v = process.env[key]
+  return v === undefined || v === '' ? fallback : v
 }
 
 function csv(key: string, fallback: string[]): string[] {
-  const v = process.env[key];
-  if (v === undefined || v === '') return fallback;
+  const v = process.env[key]
+  if (v === undefined || v === '') return fallback
   return v
     .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+    .map(s => s.trim())
+    .filter(Boolean)
 }
 
 function num(key: string, fallback: number): number {
-  const v = process.env[key];
-  const n = v === undefined ? NaN : Number(v);
-  return Number.isFinite(n) ? n : fallback;
+  const v = process.env[key]
+  const n = v === undefined ? NaN : Number(v)
+  return Number.isFinite(n) ? n : fallback
 }
 
 function bool(key: string, fallback: boolean): boolean {
-  const v = process.env[key];
-  if (v === undefined || v === '') return fallback;
-  return v === 'true' || v === '1';
+  const v = process.env[key]
+  if (v === undefined || v === '') return fallback
+  return v === 'true' || v === '1'
 }
 
 export const scraperConfig = {
@@ -29,7 +29,10 @@ export const scraperConfig = {
   apify: {
     token: str('APIFY_TOKEN', ''),
     proxyPassword: str('APIFY_PROXY_PASSWORD', ''),
-    fbSearchActor: str('APIFY_FB_SEARCH_ACTOR', 'apify/facebook-search-scraper'),
+    fbSearchActor: str(
+      'APIFY_FB_SEARCH_ACTOR',
+      'apify/facebook-search-scraper',
+    ),
     fbPagesActor: str('APIFY_FB_PAGES_ACTOR', 'apify/facebook-pages-scraper'),
     twitterActor: str('APIFY_TWITTER_ACTOR', 'apidojo/tweet-scraper'),
     instagramActor: str('APIFY_INSTAGRAM_ACTOR', 'apify/instagram-scraper'),
@@ -44,11 +47,21 @@ export const scraperConfig = {
     ]),
     location: str('SEARCH_LOCATION', 'Nigeria'),
     maxResults: num('MAX_RESULTS', 25),
-    enabledSources: csv('ENABLED_SOURCES', ['npc', 'nairaland', 'facebook', 'twitter', 'instagram', 'tiktok']),
+    enabledSources: csv('ENABLED_SOURCES', [
+      'npc',
+      'nairaland',
+      'facebook',
+      'twitter',
+      'instagram',
+      'tiktok',
+    ]),
     useMock: bool('USE_MOCK_SCRAPE', false),
   },
   sources: {
-    npcUrl: str('NPC_URL', 'https://nigeriapropertycentre.com/property-requests'),
+    npcUrl: str(
+      'NPC_URL',
+      'https://nigeriapropertycentre.com/property-requests',
+    ),
     nairalandUrl: str('NAIRALAND_URL', 'https://www.nairaland.com/properties'),
   },
   leadFilters: {
@@ -121,4 +134,4 @@ export const scraperConfig = {
   dailyLeadLimit: num('DAILY_LEAD_LIMIT', 50),
   poolTopUpMaxCycles: num('POOL_TOPUP_MAX_CYCLES', 2),
   adminSecret: str('ADMIN_SECRET', ''),
-};
+}

@@ -111,7 +111,8 @@ export class WhatsBaileyDto {
     type: 'string',
     description: 'Media URL after upload to storage',
     required: false,
-    example: 'https://api.trygetchurnshield.com/uploads/chat-media/123/456/media.jpg',
+    example:
+      'https://api.trygetchurnshield.com/uploads/chat-media/123/456/media.jpg',
   })
   mediaUrl?: string
 

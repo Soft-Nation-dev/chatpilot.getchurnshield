@@ -134,6 +134,28 @@ model messages {
   contacts              contacts  @relation(fields: [contact_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
+model ai_usage_events {
+  id              Int      @id @default(autoincrement())
+  company_id      Int?
+  contact_id      Int?
+  workload        String   @db.VarChar(40)
+  provider        String   @db.VarChar(30)
+  model           String   @db.VarChar(120)
+  status          String   @db.VarChar(20)
+  input_tokens    Int      @default(0)
+  output_tokens   Int      @default(0)
+  total_tokens    Int      @default(0)
+  estimated_units Float    @default(0)
+  latency_ms      Int      @default(0)
+  fallback_index  Int      @default(0)
+  error_code      String?  @db.VarChar(40)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([provider, created_at])
+  @@index([company_id, created_at])
+  @@index([workload, created_at])
+}
+
 model assistant_instructions {
   id            Int         @id(map: "poc_assistant_instructions_pkey") @default(autoincrement())
   model         String?     @default("gemini-3.6-flash")

@@ -115,7 +115,11 @@ export class WhatsBaileyService {
         return null
       }
       const url = `${this.serverUrl}/api/v1/whatsapp/${company.session_id}/is-on-whatsapp-with-lid`
-      const response = await axios.post(url, { number: phone }, { timeout: 15000 })
+      const response = await axios.post(
+        url,
+        { number: phone },
+        { timeout: 15000 },
+      )
       if (response.status === 201 && response.data?.length > 0) {
         const lid: string | null = response.data[0]?.lid ?? null
         if (lid) {
@@ -239,7 +243,8 @@ export class WhatsBaileyService {
       const response = await axios.post(url, body, { timeout: 75000 })
 
       if (response.status !== 201 || !response.data?.success) {
-        const message = response.data?.message || 'WhatsApp session could not be started'
+        const message =
+          response.data?.message || 'WhatsApp session could not be started'
         this.logger.error(message)
         return { success: false, message }
       }

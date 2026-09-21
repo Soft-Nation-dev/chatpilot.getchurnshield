@@ -40,10 +40,8 @@ export const KIND_BRIEFS: Record<string, string> = {
     'Write a brand-building post using the agency profile below. Help a prospective buyer understand what the agency does, who it serves, or why its approach is useful. Do not invent achievements, locations, services, years of experience, or guarantees. Close with a natural invitation to ask a question.',
   educational:
     'Write an educational post that teaches buyers something genuinely useful about buying property in Nigeria — how a title document actually protects them, what to check before paying, how allocation works. Do NOT pitch a property. Teach first. Close by inviting questions in the comments.',
-  tip:
-    'Write one short, sharp practical tip a Nigerian property buyer can act on today. One idea only. Keep it under 80 words.',
-  faq:
-    'Answer one real question Nigerian property buyers ask, in plain language. State the question, then answer it honestly, including any caveat. Close by inviting more questions.',
+  tip: 'Write one short, sharp practical tip a Nigerian property buyer can act on today. One idea only. Keep it under 80 words.',
+  faq: 'Answer one real question Nigerian property buyers ask, in plain language. State the question, then answer it honestly, including any caveat. Close by inviting more questions.',
   myth_buster:
     'Take one common and costly misconception Nigerian property buyers hold, state it plainly, then correct it with the facts. Be respectful — never make the reader feel stupid for believing it.',
   process:
@@ -94,7 +92,11 @@ export function buildContentUserPrompt(input: {
   businessProfile?: string | null
 }): string {
   const brief = KIND_BRIEFS[input.kind] ?? KIND_BRIEFS.educational
-  const lines: string[] = [`Agency: ${input.companyName}`, '', `Brief: ${brief}`]
+  const lines: string[] = [
+    `Agency: ${input.companyName}`,
+    '',
+    `Brief: ${brief}`,
+  ]
 
   if (input.topic) {
     lines.push('', `Topic: ${input.topic}`)

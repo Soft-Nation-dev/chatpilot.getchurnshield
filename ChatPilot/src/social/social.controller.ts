@@ -35,7 +35,10 @@ export class SocialController {
     }
 
     if (mode === 'subscribe' && token === socialConfig.verifyToken) {
-      res.status(200).type('text/plain').send(String(challenge ?? ''))
+      res
+        .status(200)
+        .type('text/plain')
+        .send(String(challenge ?? ''))
       return
     }
 

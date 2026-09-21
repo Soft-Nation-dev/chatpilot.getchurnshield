@@ -23,7 +23,9 @@ export class LearningProcessor extends WorkerHost {
 
     this.logger.log('Starting scheduled learning sweep')
     const result = await this.learningService.runForAllCompanies()
-    this.logger.log(`Learning sweep complete: ${result.analysed} company(s) updated`)
+    this.logger.log(
+      `Learning sweep complete: ${result.analysed} company(s) updated`,
+    )
     return result
   }
 }

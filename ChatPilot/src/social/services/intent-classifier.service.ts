@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { generateText } from 'ai'
 import { PrismaService } from 'src/prisma/prisma.service'
+import { AiRoutingService } from 'src/ai-routing/ai-routing.service'
+import { AiWorkload } from 'src/ai-routing/ai-routing.types'
 import { socialConfig } from '../social.config'
 import { INTENT_SYSTEM_PROMPT } from '../constants/intent-prompt'
 import {
@@ -29,7 +29,10 @@ const NOISE: IntentVerdict = {
 export class IntentClassifierService {
   private readonly logger = new Logger(IntentClassifierService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiRouting: AiRoutingService,
+  ) {}
 
   async classify(event: {
     id: number
@@ -43,7 +46,10 @@ export class IntentClassifierService {
     if (!text || text.length <= 2) return NOISE
     if (!/[a-z0-9]/i.test(text)) return NOISE
 
-    const lower = text.toLowerCase().replace(/[^a-z0-9\s']/g, ' ').trim()
+    const lower = text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s']/g, ' ')
+      .trim()
     if (PRAISE_ONLY.includes(lower)) return NOISE
 
     if (await this.isRepeatAuthor(event)) {
@@ -93,14 +99,9 @@ export class IntentClassifierService {
   }
 
   private async classifyWithModel(text: string): Promise<IntentVerdict> {
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) return { ...NOISE, classifier: 'error' }
-
     try {
-      const google = createGoogleGenerativeAI({ apiKey })
-
-      const { text: raw } = await generateText({
-        model: google(socialConfig.intentModel),
+      const result = await this.aiRouting.generate({
+        workload: AiWorkload.Social,
         system: INTENT_SYSTEM_PROMPT,
         temperature: 0,
         messages: [
@@ -109,15 +110,16 @@ export class IntentClassifierService {
             content: [{ type: 'text', text: text.slice(0, 500) }],
           },
         ],
+        maxOutputTokens: 150,
       })
 
-      const parsed = this.parseVerdict(raw)
+      const parsed = this.parseVerdict(result.text)
       if (!parsed) return { ...NOISE, classifier: 'error' }
 
       return {
         intent: parsed.intent,
         score: parsed.score,
-        classifier: 'gemini',
+        classifier: result.provider,
         shouldReply:
           parsed.intent !== 'noise' &&
           parsed.score >= socialConfig.intentThreshold,
