@@ -131,6 +131,7 @@ model messages {
   processed             Boolean   @default(false)
   original_message_type String?   @default("text") @db.VarChar(50)
   wb_id                 String?   @db.VarChar
+  exclude_from_ai       Boolean   @default(false)
   contacts              contacts  @relation(fields: [contact_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 

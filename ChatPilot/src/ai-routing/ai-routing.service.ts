@@ -1,7 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { generateText, LanguageModel, stepCountIs, ToolSet } from 'ai'
+import { generateText, stepCountIs, ToolSet } from 'ai'
 import { PrismaService } from 'src/prisma/prisma.service'
 import {
   candidatesForWorkload,
@@ -18,6 +16,7 @@ import {
   RoutedGenerateOptions,
   RoutedGenerateResult,
 } from './ai-routing.types'
+import { AiProviderAdapterService } from './ai-provider-adapter.service'
 
 type StickyRoute = { provider: AiProviderName; expiresAt: number }
 type ToolExecution = { name: string; result: unknown }
@@ -30,7 +29,10 @@ export class AiRoutingService {
   private readonly circuits = new Map<AiProviderName, number>()
   private readonly stickyRoutes = new Map<string, StickyRoute>()
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly providers: AiProviderAdapterService,
+  ) {}
 
   async generate(
     options: RoutedGenerateOptions,
@@ -44,13 +46,13 @@ export class AiRoutingService {
 
     for (let index = 0; index < candidates.length; index++) {
       const candidate = candidates[index]
-      if (!this.isConfigured(candidate.provider)) continue
+      if (!this.providers.isConfigured(candidate.provider)) continue
       if (this.isCircuitOpen(candidate.provider)) continue
       if (!(await this.isWithinBudget(candidate, options.workload))) continue
 
       const startedAt = Date.now()
       try {
-        const model = this.createModel(candidate)
+        const model = this.providers.createModel(candidate)
         const tools = executedTools.length
           ? undefined
           : this.trackToolExecutions(options.tools, executedTools)
@@ -77,6 +79,10 @@ export class AiRoutingService {
             : undefined,
           abortSignal: AbortSignal.timeout(candidate.timeoutMs),
         } as any)
+
+        if (!result.text?.trim()) {
+          throw new Error('Provider returned no customer-facing response')
+        }
 
         await this.recordAttempt({
           options,
@@ -125,6 +131,7 @@ export class AiRoutingService {
             workload: options.workload,
             fallbackIndex: index,
             statusCode,
+            reason: this.providers.safeErrorReason(error),
             toolExecutions: executedTools.length,
           }),
         )
@@ -150,7 +157,7 @@ export class AiRoutingService {
     mimeType: string,
     metadata: { companyId?: number; contactId?: number } = {},
   ): Promise<string> {
-    const geminiConfigured = this.isConfigured('google')
+    const geminiConfigured = this.providers.isConfigured('google')
     if (geminiConfigured && !this.isCircuitOpen('google')) {
       try {
         const result = await this.generate({
@@ -216,56 +223,6 @@ export class AiRoutingService {
       )
     }
     return body.text.trim()
-  }
-
-  private createModel(candidate: ProviderCandidate): LanguageModel {
-    if (candidate.provider === 'cloudflare') {
-      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID as string
-      const apiToken = process.env.CLOUDFLARE_API_TOKEN as string
-      const gatewayId = process.env.CLOUDFLARE_AI_GATEWAY_ID || 'default'
-      const provider = createOpenAICompatible({
-        name: 'cloudflare',
-        baseURL: `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`,
-        apiKey: apiToken,
-        headers: { 'cf-aig-gateway-id': gatewayId },
-      })
-      return provider.chatModel(candidate.model)
-    }
-
-    if (candidate.provider === 'groq') {
-      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
-      const gatewayId = process.env.CLOUDFLARE_AI_GATEWAY_ID || 'default'
-      const gatewayBase = accountId
-        ? `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/groq`
-        : 'https://api.groq.com/openai/v1'
-      const provider = createOpenAICompatible({
-        name: 'groq',
-        baseURL: gatewayBase,
-        apiKey: process.env.GROQ_API_KEY,
-      })
-      return provider.chatModel(candidate.model)
-    }
-
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
-    const gatewayId = process.env.CLOUDFLARE_AI_GATEWAY_ID || 'default'
-    return createGoogleGenerativeAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      ...(accountId
-        ? {
-            baseURL: `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/google-ai-studio/v1beta`,
-          }
-        : {}),
-    })(candidate.model)
-  }
-
-  private isConfigured(provider: AiProviderName): boolean {
-    if (provider === 'cloudflare') {
-      return !!(
-        process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN
-      )
-    }
-    if (provider === 'groq') return !!process.env.GROQ_API_KEY
-    return !!process.env.GEMINI_API_KEY
   }
 
   private orderCandidates(

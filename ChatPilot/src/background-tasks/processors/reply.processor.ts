@@ -7,6 +7,7 @@ import { ContactService } from 'src/contact/contact.service'
 import { AUTHOR_TYPE, Company, Contact } from 'src/utils/constants/types'
 import { WhatsAppFormatter } from '../../utils/services/whatsapp-formatter.helper'
 import { messages } from '@prisma/client'
+import { buildDegradedReply } from '../degraded-reply'
 
 @Processor(BackgroundQueue.REPLIES, { concurrency: 1 })
 export class ReplyProcessor extends WorkerHost {
@@ -41,6 +42,7 @@ export class ReplyProcessor extends WorkerHost {
         this.logger.log(`combinedMessages: ${combinedMessages}`)
 
         let openAIMessage: string | null
+        let degradedReply = false
         try {
           openAIMessage =
             await this.messageProcessingService.processClientMessage(
@@ -56,7 +58,8 @@ export class ReplyProcessor extends WorkerHost {
           )
           openAIMessage =
             process.env.AI_UNAVAILABLE_REPLY ||
-            'Thanks for your message. Our assistant is temporarily unavailable, so I have flagged this conversation for a team member to follow up.'
+            buildDegradedReply(contact as Contact, combinedMessages)
+          degradedReply = true
           await this.contactService.updateContact(contact.id, {
             needs_review: true,
           })
@@ -92,7 +95,13 @@ export class ReplyProcessor extends WorkerHost {
               image: image.url,
             })
           } else {
-            await this.contactService.sendMessage(contact as Contact, part)
+            await this.contactService.sendMessage(
+              contact as Contact,
+              part,
+              undefined,
+              AUTHOR_TYPE.BOT,
+              degradedReply ? 'ai_fallback' : undefined,
+            )
             replyMessages.push({ message: part })
           }
         }

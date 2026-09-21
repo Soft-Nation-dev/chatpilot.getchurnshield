@@ -176,6 +176,7 @@ export class ContactService {
       authorType,
       originalMessageType,
       wbId,
+      source === 'ai_fallback',
     )
   }
 
@@ -188,6 +189,7 @@ export class ContactService {
     authorType: AUTHOR_TYPE = AUTHOR_TYPE.BOT,
     originalMessageType: ORIGINAL_MESSAGE_TYPE = ORIGINAL_MESSAGE_TYPE.TEXT,
     wbId: string | null = null,
+    excludeFromAi: boolean = false,
   ): Promise<void> {
     await this.prisma.messages.create({
       data: {
@@ -199,6 +201,7 @@ export class ContactService {
         processed: authorType === AUTHOR_TYPE.BOT ? true : false,
         original_message_type: originalMessageType,
         wb_id: wbId,
+        exclude_from_ai: excludeFromAi,
       },
     })
   }
@@ -291,6 +294,7 @@ export class ContactService {
     const messages = await this.prisma.messages.findMany({
       where: {
         contact_id: contactId,
+        exclude_from_ai: false,
         ...(onlyProcessed ? { processed: onlyProcessed } : {}),
       },
       orderBy: {
@@ -351,7 +355,7 @@ export class ContactService {
   ): Promise<Contact | null> {
     try {
       // If we have phone but no LID, fetch LID from WB API
-      if (!isFromLid && phone != null && userlid == null) {
+      if (!isFromLid && phone !== null && userlid === null) {
         try {
           userlid = await this.whatsBailey.getLid(
             company as any,
@@ -365,7 +369,7 @@ export class ContactService {
       // Build where clause: search by LID if isFromLid, otherwise by phone (with optional LID match)
       const whereClause: any = isFromLid
         ? { lid: userlid, company_id: company.id }
-        : userlid != null
+        : userlid !== null
           ? {
               OR: [
                 { phone: phone, company_id: company.id },
@@ -400,10 +404,10 @@ export class ContactService {
 
       // Merge: fill in missing phone or LID on existing contact
       const updateData: any = {}
-      if (contact.phone == null && phone != null && !isFromLid) {
+      if (contact.phone === null && phone !== null && !isFromLid) {
         updateData.phone = phone
       }
-      if (contact.lid == null && userlid != null) {
+      if (contact.lid === null && userlid !== null) {
         updateData.lid = userlid
       }
       if (Object.keys(updateData).length > 0) {
