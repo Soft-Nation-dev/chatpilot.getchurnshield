@@ -53,6 +53,7 @@ export class AiRoutingService {
       const startedAt = Date.now()
       try {
         const model = this.providers.createModel(candidate)
+        const toolCountBefore = executedTools.length
         const tools = executedTools.length
           ? undefined
           : this.trackToolExecutions(options.tools, executedTools)
@@ -74,11 +75,31 @@ export class AiRoutingService {
           ...(tools === undefined ? {} : { tools }),
           temperature: options.temperature,
           maxOutputTokens: options.maxOutputTokens,
-          stopWhen: options.maxSteps
-            ? stepCountIs(options.maxSteps)
-            : undefined,
+          stopWhen:
+            candidate.provider === 'cloudflare' && tools
+              ? stepCountIs(1)
+              : options.maxSteps
+                ? stepCountIs(options.maxSteps)
+                : undefined,
           abortSignal: AbortSignal.timeout(candidate.timeoutMs),
         } as any)
+
+        const handedOffToolResult =
+          candidate.provider === 'cloudflare' &&
+          executedTools.length > toolCountBefore &&
+          !result.text?.trim()
+        if (handedOffToolResult) {
+          await this.recordAttempt({
+            options,
+            candidate,
+            status: 'handoff',
+            latencyMs: Date.now() - startedAt,
+            fallbackIndex: index,
+            usage: result.usage,
+          })
+          this.closeCircuit(candidate.provider)
+          continue
+        }
 
         if (!result.text?.trim()) {
           throw new Error('Provider returned no customer-facing response')

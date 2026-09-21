@@ -28,7 +28,6 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.46",
-    "@ai-sdk/openai": "^2.0.127",
     "@ai-sdk/openai-compatible": "^1.0.54",
     "@bull-board/api": "^6.7.9",
     "@bull-board/express": "^6.7.9",

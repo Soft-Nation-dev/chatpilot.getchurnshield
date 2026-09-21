@@ -1,11 +1,31 @@
 import { Injectable } from '@nestjs/common'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { LanguageModel } from 'ai'
 import { AiProviderName, ProviderCandidate } from './ai-routing.types'
 
 type ProviderRoute = 'direct' | 'gateway'
+
+export function normalizeCompatibleRequestBody(
+  body: BodyInit | null | undefined,
+): BodyInit | null | undefined {
+  if (typeof body !== 'string') return body
+  try {
+    const value = JSON.parse(body) as { messages?: Array<Record<string, any>> }
+    if (!Array.isArray(value.messages)) return body
+    value.messages = value.messages.map(message => {
+      const normalized = { ...message }
+      // GPT-OSS providers may return reasoning_content, but neither Groq nor
+      // Cloudflare accepts that provider-specific field when the assistant
+      // tool call is sent back for the next step.
+      delete normalized.reasoning_content
+      return normalized
+    })
+    return JSON.stringify(value)
+  } catch {
+    return body
+  }
+}
 
 @Injectable()
 export class AiProviderAdapterService {
@@ -56,28 +76,18 @@ export class AiProviderAdapterService {
     const gatewayId = process.env.CLOUDFLARE_AI_GATEWAY_ID || 'default'
     const baseURL = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`
     const headers = { 'cf-aig-gateway-id': gatewayId }
-
-    // Cloudflare documents the Responses API as the agentic endpoint for
-    // GPT-OSS. It preserves multi-step tool calls more reliably than treating
-    // Workers AI as a generic Chat Completions provider.
-    if (candidate.model.includes('gpt-oss')) {
-      const provider = createOpenAI({
-        name: 'cloudflare',
-        baseURL,
-        apiKey: process.env.CLOUDFLARE_API_TOKEN,
-        headers,
-      })
-      return provider.responses(candidate.model as any)
-    }
-
-    // Other Workers AI models continue through Cloudflare's OpenAI-compatible
-    // Chat Completions endpoint, which supports the broader model catalogue.
     const provider = createOpenAICompatible({
       name: 'cloudflare',
       baseURL,
       apiKey: process.env.CLOUDFLARE_API_TOKEN,
       headers,
     })
+
+    // Cloudflare's Responses endpoint currently accepts plain GPT-OSS turns
+    // but rejects function tools. The documented Chat Completions endpoint
+    // supports the broader Workers AI catalogue and function calling. Keep the
+    // provider major aligned with AI SDK v5 so message content is serialized
+    // using Cloudflare's accepted schema.
     return provider.chatModel(candidate.model)
   }
 
@@ -93,6 +103,7 @@ export class AiProviderAdapterService {
         : 'https://api.groq.com/openai/v1',
       apiKey: process.env.GROQ_API_KEY,
       headers: throughGateway ? this.gatewayAuthenticationHeaders() : undefined,
+      fetch: this.compatibleFetch,
     })
     return provider.chatModel(candidate.model)
   }
@@ -117,6 +128,16 @@ export class AiProviderAdapterService {
   private gatewayAuthenticationHeaders(): Record<string, string> | undefined {
     const token = process.env.CLOUDFLARE_API_TOKEN
     return token ? { 'cf-aig-authorization': `Bearer ${token}` } : undefined
+  }
+
+  private compatibleFetch(
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> {
+    return fetch(input, {
+      ...init,
+      body: normalizeCompatibleRequestBody(init?.body),
+    })
   }
 
   private redact(input: string): string {
