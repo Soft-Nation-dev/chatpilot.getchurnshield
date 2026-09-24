@@ -9,9 +9,9 @@ rediscovered each time.
 - Hostinger plan/image: KVM 1, Ubuntu 24.04 with Docker
 - SSH user: `root`
 - Host key fingerprint: `SHA256:EZbYjvOX7av3mN2h1xt4YBSA+zUXGBGnt6d2oU22Iqc`
-- Hostinger SSH-key label: `temporary-chatpilot-deploy-3`
+- Hostinger SSH-key label: `chatpilot-kvm1-deploy`
 - Local private-key path on the deployment PC:
-  `C:\Users\HP\.ssh\chatpilot-codex-deploy-3`
+  `C:\Users\HP\.ssh\chatpilot-kvm1-deploy`
 - Active release symlink: `/opt/churnshield/current`
 - Immutable releases: `/opt/churnshield/releases/<short-git-sha>`
 - Shared infrastructure Compose directory: `/opt/churnshield/deployment`
@@ -23,7 +23,7 @@ online until the KVM 1 migration has been observed in production and the owner
 explicitly approves retirement.
 
 The SSH private key and API-provider credentials must never be copied into this
-repository. Keep `temporary-chatpilot-deploy-3` installed until it is replaced
+repository. Keep `chatpilot-kvm1-deploy` installed until it is replaced
 with another verified deployment key. Provider credentials live only in the
 active release's `infra/hostinger/.env` file.
 
