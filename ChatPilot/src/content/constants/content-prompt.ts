@@ -90,6 +90,8 @@ export function buildContentUserPrompt(input: {
   topic?: string | null
   learned?: string | null
   businessProfile?: string | null
+  recentCaptions?: string[]
+  mediaContext?: string | null
 }): string {
   const brief = KIND_BRIEFS[input.kind] ?? KIND_BRIEFS.educational
   const lines: string[] = [
@@ -151,6 +153,18 @@ export function buildContentUserPrompt(input: {
       '',
       'What has worked with this audience before (apply it):',
       input.learned,
+    )
+  }
+
+  if (input.mediaContext) {
+    lines.push('', 'Selected visual:', input.mediaContext)
+  }
+
+  if (input.recentCaptions?.length) {
+    lines.push(
+      '',
+      'Recent posts — do not repeat their hook, wording, angle, or call to action:',
+      input.recentCaptions.map((caption, index) => `${index + 1}. ${caption.slice(0, 300)}`).join('\n'),
     )
   }
 

@@ -453,6 +453,49 @@ export class CompanyController {
     return this.companyService.getAssets(id)
   }
 
+  @ApiOperation({ summary: 'Register media stored in the public media library' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/assets/register')
+  async registerMedia(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body()
+    body: {
+      url: string
+      name: string
+      contentType: string
+      key?: string
+      size?: number
+      items?: Array<{
+        url: string
+        name: string
+        contentType: string
+        key?: string
+        size?: number
+      }>
+    },
+  ) {
+    await this.verifyOwnership(req.user.userId, id)
+    if (Array.isArray(body.items)) {
+      return this.companyService.registerExternalMediaBatch(id, body.items)
+    }
+    return this.companyService.registerExternalMedia(id, body)
+  }
+
+  @ApiOperation({ summary: 'Remove a deleted media-library item from the index' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/assets/unregister')
+  async unregisterMedia(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { url: string },
+  ) {
+    await this.verifyOwnership(req.user.userId, id)
+    return this.companyService.unregisterExternalMedia(id, body.url)
+  }
+
   @ApiOperation({ summary: 'Update asset description' })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)

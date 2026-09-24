@@ -7,6 +7,7 @@ import {
   EDUCATIONAL_TOPICS,
   buildContentUserPrompt,
 } from '../constants/content-prompt'
+import { MediaIntelligenceService } from './media-intelligence.service'
 
 @Injectable()
 export class ContentGeneratorService {
@@ -15,6 +16,7 @@ export class ContentGeneratorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiRouting: AiRoutingService,
+    private readonly media: MediaIntelligenceService,
   ) {}
 
   async generate(
@@ -48,6 +50,17 @@ export class ContentGeneratorService {
       (options.kind === 'showcase' ? null : this.pickTopic(companyId))
 
     const learned = await this.activeGuidelines(companyId)
+    const recentPosts = await this.prisma.content_posts.findMany({
+      where: { company_id: companyId },
+      orderBy: { created_at: 'desc' },
+      take: 8,
+      select: { caption: true },
+    })
+    const selectedMedia = await this.media.selectForPost(companyId, {
+      kind: options.kind,
+      topic,
+      property,
+    })
 
     const drafted = await this.draft(companyId, {
       kind: options.kind,
@@ -56,9 +69,13 @@ export class ContentGeneratorService {
       topic,
       learned,
       businessProfile: this.businessProfile(company.business_details),
+      recentCaptions: recentPosts.map(row => row.caption),
+      mediaContext: selectedMedia
+        ? `Use the selected ${selectedMedia.source} visual as context. Keep the caption relevant to it without claiming facts that were not supplied.`
+        : null,
     })
 
-    return this.prisma.content_posts.create({
+    const post = await this.prisma.content_posts.create({
       data: {
         company_id: companyId,
         property_id: property?.id ?? null,
@@ -66,13 +83,15 @@ export class ContentGeneratorService {
         topic: topic ?? null,
         caption: drafted.caption,
         hashtags: drafted.hashtags,
-        image_urls: property?.image_urls ?? null,
+        image_urls: selectedMedia?.url ?? property?.image_urls ?? null,
         platforms: options.platforms ?? 'facebook,instagram',
         status: options.autoApprove ? 'approved' : 'draft',
         scheduled_at: options.scheduledAt ?? null,
         automation_generated: options.automationGenerated ?? false,
       },
     })
+    await this.media.markUsed(selectedMedia?.assetId ?? null)
+    return post
   }
 
   async generateBatch(
@@ -131,6 +150,8 @@ export class ContentGeneratorService {
       topic: string | null
       learned: string | null
       businessProfile: string | null
+      recentCaptions: string[]
+      mediaContext: string | null
     },
   ): Promise<{ caption: string; hashtags: string }> {
     const { text } = await this.aiRouting.generate({
@@ -151,6 +172,8 @@ export class ContentGeneratorService {
                 topic: input.topic,
                 learned: input.learned,
                 businessProfile: input.businessProfile,
+                recentCaptions: input.recentCaptions,
+                mediaContext: input.mediaContext,
               }),
             },
           ],

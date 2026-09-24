@@ -6,6 +6,7 @@ import {
   publicMediaUrl,
   requireMediaUser,
 } from '@/lib/server/media'
+import { API_BASE_URL } from '@/lib/api-base'
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024
@@ -46,6 +47,15 @@ export async function GET(request: NextRequest) {
         contentType: object.httpMetadata?.contentType || 'image/jpeg',
         url: publicMediaUrl(request, object.key),
       }))
+
+    const authorization = request.headers.get('authorization')
+    if (authorization && items.length) {
+      await fetch(`${API_BASE_URL}/companies/${user.company_id}/assets/register`, {
+        method: 'POST',
+        headers: { authorization, 'content-type': 'application/json' },
+        body: JSON.stringify({ items }),
+      }).catch(() => undefined)
+    }
 
     return Response.json({ items })
   } catch (error) {
@@ -90,16 +100,24 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return Response.json({
-      item: {
-        key,
-        name: file.name,
-        size: file.size,
-        uploadedAt: new Date().toISOString(),
-        contentType: file.type,
-        url: publicMediaUrl(request, key),
-      },
-    }, { status: 201 })
+    const item = {
+      key,
+      name: file.name,
+      size: file.size,
+      uploadedAt: new Date().toISOString(),
+      contentType: file.type,
+      url: publicMediaUrl(request, key),
+    }
+    const authorization = request.headers.get('authorization')
+    if (authorization) {
+      await fetch(`${API_BASE_URL}/companies/${user.company_id}/assets/register`, {
+        method: 'POST',
+        headers: { authorization, 'content-type': 'application/json' },
+        body: JSON.stringify(item),
+      }).catch(() => undefined)
+    }
+
+    return Response.json({ item }, { status: 201 })
   } catch (error) {
     return mediaErrorResponse(error)
   }
@@ -116,7 +134,16 @@ export async function DELETE(request: NextRequest) {
     }
 
     const bucket = await getMediaBucket()
+    const url = publicMediaUrl(request, key)
     await bucket.delete(key)
+    const authorization = request.headers.get('authorization')
+    if (authorization) {
+      await fetch(`${API_BASE_URL}/companies/${user.company_id}/assets/unregister`, {
+        method: 'POST',
+        headers: { authorization, 'content-type': 'application/json' },
+        body: JSON.stringify({ url }),
+      }).catch(() => undefined)
+    }
     return Response.json({ deleted: true })
   } catch (error) {
     return mediaErrorResponse(error)

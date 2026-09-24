@@ -6,6 +6,7 @@ export enum AiWorkload {
   Transcription = 'transcription',
   Social = 'social',
   Content = 'content',
+  MediaIndex = 'media-index',
   Learning = 'learning',
   Prompt = 'prompt',
 }

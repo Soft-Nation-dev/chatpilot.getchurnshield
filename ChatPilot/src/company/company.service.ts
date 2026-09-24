@@ -19,6 +19,8 @@ import {
   decryptContactFields,
   decryptContactsInPlace,
 } from 'src/common/crypto/contact-crypto'
+import { createHash } from 'node:crypto'
+import AdmZip from 'adm-zip'
 
 const OTP_TTL_MS = 60 * 1000
 
@@ -628,10 +630,180 @@ Generate ONLY the system prompt text, no explanations.`,
         file_type: fileType,
         file_name: file.originalname,
         description: description || null,
+        mime_type: file.mimetype || null,
+        content_hash: createHash('sha256').update(file.buffer).digest('hex'),
       },
     })
 
-    return asset
+    const extracted = await this.extractDocumentImages(
+      companyId,
+      asset.id,
+      file.originalname,
+      file.buffer,
+      fileType,
+    )
+
+    return { ...asset, extracted_images: extracted }
+  }
+
+  async registerExternalMedia(
+    companyId: number,
+    input: {
+      url: string
+      name: string
+      contentType: string
+      key?: string
+      size?: number
+    },
+  ) {
+    if (!/^https:\/\//i.test(input.url)) {
+      throw new UnprocessableEntityException('Media URL must use HTTPS')
+    }
+    const fileType = input.contentType.startsWith('video/') ? 'video' : 'image'
+    return this.prisma.company_assets.upsert({
+      where: {
+        company_id_file_url: { company_id: companyId, file_url: input.url },
+      },
+      create: {
+        company_id: companyId,
+        file_url: input.url,
+        file_type: fileType,
+        file_name: input.name.slice(0, 255),
+        mime_type: input.contentType.slice(0, 120),
+        source: 'media-library',
+        source_ref: input.key?.slice(0, 120) || null,
+      },
+      update: {
+        file_name: input.name.slice(0, 255),
+        mime_type: input.contentType.slice(0, 120),
+        source: 'media-library',
+        source_ref: input.key?.slice(0, 120) || null,
+      },
+    })
+  }
+
+  async registerExternalMediaBatch(
+    companyId: number,
+    items: Array<{
+      url: string
+      name: string
+      contentType: string
+      key?: string
+      size?: number
+    }>,
+  ) {
+    const safe = items.slice(0, 100).filter(item => /^https:\/\//i.test(item.url))
+    const registered: unknown[] = []
+    for (const item of safe) {
+      registered.push(await this.registerExternalMedia(companyId, item))
+    }
+    return { registered: registered.length }
+  }
+
+  async unregisterExternalMedia(companyId: number, url: string) {
+    const deleted = await this.prisma.company_assets.deleteMany({
+      where: {
+        company_id: companyId,
+        file_url: url,
+        source: 'media-library',
+      },
+    })
+    return { deleted: deleted.count }
+  }
+
+  private async extractDocumentImages(
+    companyId: number,
+    parentId: number,
+    fileName: string,
+    buffer: Buffer,
+    fileType: string,
+  ): Promise<number> {
+    const candidates: Array<{ name: string; buffer: Buffer; mime: string }> = []
+
+    if (['doc', 'ppt', 'xls'].includes(fileType) && /x$/i.test(fileName)) {
+      try {
+        const archive = new AdmZip(buffer)
+        for (const entry of archive.getEntries()) {
+          if (!/(?:word|ppt|xl)\/media\//i.test(entry.entryName)) continue
+          if (entry.isDirectory) continue
+          const ext = entry.entryName.split('.').pop()?.toLowerCase() || ''
+          const mime =
+            ext === 'png'
+              ? 'image/png'
+              : ext === 'webp'
+                ? 'image/webp'
+                : ['jpg', 'jpeg'].includes(ext)
+                  ? 'image/jpeg'
+                  : ''
+          if (!mime) continue
+          const image = entry.getData()
+          if (image.length >= 8_000) {
+            candidates.push({ name: entry.entryName, buffer: image, mime })
+          }
+          if (candidates.length >= 8) break
+        }
+      } catch (error) {
+        this.logger.warn(`Could not extract images from ${fileName}: ${error?.message}`)
+      }
+    }
+
+    if (fileType === 'pdf') {
+      // Most marketing PDFs keep photographs as complete JPEG streams. Pull
+      // those streams without rendering pages or consuming AI credits.
+      let offset = 0
+      while (candidates.length < 8) {
+        const start = buffer.indexOf(Buffer.from([0xff, 0xd8, 0xff]), offset)
+        if (start < 0) break
+        const end = buffer.indexOf(Buffer.from([0xff, 0xd9]), start + 3)
+        if (end < 0) break
+        const image = buffer.subarray(start, end + 2)
+        if (image.length >= 12_000) {
+          candidates.push({
+            name: `pdf-image-${candidates.length + 1}.jpg`,
+            buffer: image,
+            mime: 'image/jpeg',
+          })
+        }
+        offset = end + 2
+      }
+    }
+
+    let created = 0
+    const seen = new Set<string>()
+    for (const [index, candidate] of candidates.entries()) {
+      const hash = createHash('sha256').update(candidate.buffer).digest('hex')
+      if (seen.has(hash)) continue
+      seen.add(hash)
+      const duplicate = await this.prisma.company_assets.findFirst({
+        where: { company_id: companyId, content_hash: hash },
+        select: { id: true },
+      })
+      if (duplicate) continue
+      const ext = candidate.mime === 'image/png' ? 'png' : candidate.mime === 'image/webp' ? 'webp' : 'jpg'
+      const extractedName = `${fileName.replace(/\.[^.]+$/, '')}-image-${index + 1}.${ext}`
+      const url = await this.storageService.uploadCompanyAsset(
+        companyId,
+        extractedName,
+        candidate.buffer,
+        candidate.mime,
+      )
+      if (!url) continue
+      await this.prisma.company_assets.create({
+        data: {
+          company_id: companyId,
+          file_url: url,
+          file_type: 'image',
+          file_name: extractedName,
+          description: `Image extracted from ${fileName}`,
+          mime_type: candidate.mime,
+          source: 'document-extract',
+          source_ref: String(parentId),
+          content_hash: hash,
+        },
+      })
+      created++
+    }
+    return created
   }
 
   async getAssets(companyId: number) {

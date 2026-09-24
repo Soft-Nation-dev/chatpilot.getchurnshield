@@ -133,6 +133,8 @@ model messages {
   wb_id                 String?   @db.VarChar
   exclude_from_ai       Boolean   @default(false)
   contacts              contacts  @relation(fields: [contact_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([contact_id, wb_id])
 }
 
 model ai_usage_events {
@@ -166,16 +168,28 @@ model assistant_instructions {
 }
 
 model company_assets {
-  id          Int       @id @default(autoincrement())
-  company_id  Int
-  file_url    String
-  file_type   String    @db.VarChar(20)
-  file_name   String    @db.VarChar(255)
-  description String?
-  created_at  DateTime  @default(now()) @db.Timestamptz(6)
-  company     companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  id           Int       @id @default(autoincrement())
+  company_id   Int
+  file_url     String
+  file_type    String    @db.VarChar(20)
+  file_name    String    @db.VarChar(255)
+  description  String?
+  mime_type    String?   @db.VarChar(120)
+  source       String    @default("company-upload") @db.VarChar(30)
+  source_ref   String?   @db.VarChar(120)
+  content_hash String?   @db.VarChar(64)
+  ai_summary   String?
+  ai_tags      String?
+  indexed_at   DateTime? @db.Timestamptz(6)
+  last_used_at DateTime? @db.Timestamptz(6)
+  use_count    Int       @default(0)
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  company      companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
 
+  @@unique([company_id, file_url])
   @@index([company_id])
+  @@index([company_id, file_type, indexed_at])
+  @@index([company_id, last_used_at])
 }
 
 model leads {

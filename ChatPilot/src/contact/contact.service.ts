@@ -330,20 +330,31 @@ export class ContactService {
     originalMessageType: ORIGINAL_MESSAGE_TYPE = ORIGINAL_MESSAGE_TYPE.TEXT,
     wbId: string | null = null,
     imageUrl: string | null = null,
-  ): Promise<messages> {
-    const message = await this.prisma.messages.create({
-      data: {
-        contact_id: self.id,
-        sender_phone: self.phone,
-        message: encryptMessage(text),
-        author_type: AUTHOR_TYPE.HUMAN,
-        original_message_type: originalMessageType,
-        wb_id: wbId,
-        image_url: imageUrl,
-        message_type: imageUrl ? 'image' : 'text',
-      },
-    })
-    return message
+  ): Promise<messages | null> {
+    if (wbId) {
+      const duplicate = await this.prisma.messages.findFirst({
+        where: { contact_id: self.id, wb_id: wbId },
+      })
+      if (duplicate) return null
+    }
+
+    try {
+      return await this.prisma.messages.create({
+        data: {
+          contact_id: self.id,
+          sender_phone: self.phone,
+          message: encryptMessage(text),
+          author_type: AUTHOR_TYPE.HUMAN,
+          original_message_type: originalMessageType,
+          wb_id: wbId,
+          image_url: imageUrl,
+          message_type: imageUrl ? 'image' : 'text',
+        },
+      })
+    } catch (error) {
+      if ((error as any)?.code === 'P2002' && wbId) return null
+      throw error
+    }
   }
 
   async getOrCreateContact(

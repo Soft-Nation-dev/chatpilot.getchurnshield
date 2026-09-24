@@ -17,6 +17,7 @@ import {
   RoutedGenerateResult,
 } from './ai-routing.types'
 import { AiProviderAdapterService } from './ai-provider-adapter.service'
+import { sanitizeCustomerOutput } from './customer-output-guard'
 
 type StickyRoute = { provider: AiProviderName; expiresAt: number }
 type ToolExecution = { name: string; result: unknown }
@@ -101,7 +102,13 @@ export class AiRoutingService {
           continue
         }
 
-        if (!result.text?.trim()) {
+        const customerText = [
+          AiWorkload.LiveChat,
+          AiWorkload.MultimodalChat,
+        ].includes(options.workload)
+          ? sanitizeCustomerOutput(result.text)
+          : result.text?.trim()
+        if (!customerText) {
           throw new Error('Provider returned no customer-facing response')
         }
 
@@ -117,7 +124,7 @@ export class AiRoutingService {
         this.rememberStickyRoute(options.routingKey, candidate.provider)
 
         return {
-          text: result.text,
+          text: customerText,
           usage: result.usage,
           provider: candidate.provider,
           model: candidate.model,

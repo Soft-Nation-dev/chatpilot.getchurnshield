@@ -34,6 +34,13 @@ export function candidatesForWorkload(
     ])
   }
 
+  if (workload === AiWorkload.MediaIndex) {
+    return candidates([
+      ['cloudflare', CLOUDFLARE_VISION, 18_000],
+      ['google', GEMINI, 18_000],
+    ])
+  }
+
   if (workload === AiWorkload.LiveChat) {
     return candidates([
       ['cloudflare', CLOUDFLARE_CHAT, 12_000],

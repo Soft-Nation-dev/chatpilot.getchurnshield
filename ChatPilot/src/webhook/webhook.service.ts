@@ -118,16 +118,21 @@ export class WebhookService {
         }
         // incoming Message
 
-        await Promise.all([
-          this.contactService.resetFollowUps(contact.id),
-          this.contactService.saveIncomingMessage(
-            contact,
-            message,
-            originalMessageType,
-            wbId ?? null,
-            mediaUrl ?? null,
-          ),
-        ])
+        const saved = await this.contactService.saveIncomingMessage(
+          contact,
+          message,
+          originalMessageType,
+          wbId ?? null,
+          mediaUrl ?? null,
+        )
+        if (!saved) {
+          this.logger.log('Ignoring duplicate WhatsApp event', {
+            contactId: contact.id,
+            wbId,
+          })
+          return true
+        }
+        await this.contactService.resetFollowUps(contact.id)
 
         this.socialAttribution
           .attachIfSocialRef(contact, message)

@@ -8,6 +8,7 @@ import { AUTHOR_TYPE, Company, Contact } from 'src/utils/constants/types'
 import { WhatsAppFormatter } from '../../utils/services/whatsapp-formatter.helper'
 import { messages } from '@prisma/client'
 import { buildDegradedReply } from '../degraded-reply'
+import { sanitizeCustomerOutput } from 'src/ai-routing/customer-output-guard'
 
 @Processor(BackgroundQueue.REPLIES, { concurrency: 1 })
 export class ReplyProcessor extends WorkerHost {
@@ -77,8 +78,19 @@ export class ReplyProcessor extends WorkerHost {
             generatedReplies: replyMessages,
           }
         }
-        const contentParts =
-          this.WaFormattingService.splitMessage(openAIMessage)
+        const safeReply = sanitizeCustomerOutput(openAIMessage)
+        if (!safeReply) {
+          this.logger.error(`Unsafe or empty AI reply blocked for contact ${contact.id}`)
+          await this.contactService.updateContact(contact.id, {
+            needs_review: true,
+          })
+          await this.contactService.markMessagesProcessed(contact)
+          return {
+            messagesProcessed: contactMessagesList,
+            generatedReplies: replyMessages,
+          }
+        }
+        const contentParts = this.WaFormattingService.splitMessage(safeReply)
 
         for (let i = 0; i < contentParts.length; i++) {
           const part = contentParts[i]

@@ -164,6 +164,30 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
+      <motion.div variants={item}>
+        <div className="relative overflow-hidden rounded-2xl border border-indigo-200/70 bg-gradient-to-r from-indigo-50 via-white to-violet-50 p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">Monthly subscription</p>
+                <h3 className="mt-0.5 font-semibold text-slate-900">30-day service clock</h3>
+                <p className="mt-1 text-xs text-slate-500">The countdown will begin when this account&apos;s first paid subscription is activated.</p>
+              </div>
+            </div>
+            <div className="rounded-xl border border-indigo-100 bg-white/90 px-5 py-3 text-left sm:text-right">
+              <p className="text-xl font-bold text-slate-800">30 days</p>
+              <p className="text-xs font-medium text-slate-400">Not started</p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card) => (
           <motion.div key={card.label} variants={item}>

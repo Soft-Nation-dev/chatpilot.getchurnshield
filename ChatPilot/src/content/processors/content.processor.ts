@@ -4,6 +4,7 @@ import { Job } from 'bullmq'
 import { BackgroundQueue } from 'src/utils/constants/background.constants'
 import { ContentPublisherService } from '../services/content-publisher.service'
 import { ContentAutomationService } from '../services/content-automation.service'
+import { MediaIntelligenceService } from '../services/media-intelligence.service'
 
 @Processor(BackgroundQueue.CONTENT, { concurrency: 1 })
 export class ContentProcessor extends WorkerHost {
@@ -12,11 +13,16 @@ export class ContentProcessor extends WorkerHost {
   constructor(
     private readonly publisher: ContentPublisherService,
     private readonly automation: ContentAutomationService,
+    private readonly media: MediaIntelligenceService,
   ) {
     super()
   }
 
   async process(job: Job): Promise<any> {
+    if (job.name === 'index-media') {
+      const indexed = await this.media.indexPendingAll()
+      return { indexed }
+    }
     if (job.name === 'plan-drafts') {
       const created = await this.automation.planAll()
       if (created) {
