@@ -9,7 +9,7 @@ const CLOUDFLARE_BACKGROUND = '@cf/qwen/qwen3-30b-a3b-fp8'
 const CLOUDFLARE_VISION = '@cf/qwen/qwen3.8-27b'
 const GROQ_CHAT = 'openai/gpt-oss-20b'
 const GROQ_BACKGROUND = 'qwen/qwen3.8-27b'
-const GEMINI = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+const GEMINI = process.env.GEMINI_MODEL || 'gemini-3.6-flash'
 
 const candidates = (
   values: Array<[AiProviderName, string, number]>,

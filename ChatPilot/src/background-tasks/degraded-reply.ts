@@ -32,6 +32,32 @@ export function buildDegradedReply(contact: Contact, rawMessage: string) {
   const budget = budgetFromMessage(message)
   const firstName = contact.name?.trim().split(/\s+/)[0]
   const greeting = firstName ? `Thanks, ${firstName}.` : 'Thanks.'
+  const inspection = (contact as any).conversation_state?.inspection as
+    | {
+        status?: string
+        propertyTitle?: string
+        requestedDay?: string
+        requestedTime?: string
+      }
+    | undefined
+
+  if (inspection?.status === 'awaiting_human') {
+    return `I have your inspection request${
+      inspection.propertyTitle ? ` for ${inspection.propertyTitle}` : ''
+    }${inspection.requestedDay ? ` on ${inspection.requestedDay}` : ''}. Our team is confirming the available time and will get back to you shortly.`
+  }
+
+  if (inspection?.status === 'booked') {
+    return `Your inspection${
+      inspection.propertyTitle ? ` for ${inspection.propertyTitle}` : ''
+    } is already booked. If anything changes, just let me know.`
+  }
+
+  if (inspection?.requestedDay && !inspection.requestedTime) {
+    return `${inspection.requestedDay} is noted${
+      inspection.propertyTitle ? ` for ${inspection.propertyTitle}` : ''
+    }. What time on ${inspection.requestedDay} works best for you?`
+  }
 
   if (budget) {
     return `${greeting} I’ve noted your ${budget} budget. What property type and location are you considering?`
@@ -42,6 +68,9 @@ export function buildDegradedReply(contact: Contact, rawMessage: string) {
       message,
     )
   ) {
+    if (inspection?.propertyTitle) {
+      return `${greeting} I have ${inspection.propertyTitle} noted. What detail would you like me to clarify?`
+    }
     const knownPreference = [contact.property_type, contact.preferred_location]
       .filter(Boolean)
       .join(' in ')
@@ -55,7 +84,11 @@ export function buildDegradedReply(contact: Contact, rawMessage: string) {
       message,
     )
   ) {
-    return `${greeting} What day and time would you prefer for the inspection? I’ll keep that request for confirmation.`
+    return inspection?.requestedDay
+      ? `${inspection.requestedDay} is noted${
+          inspection.propertyTitle ? ` for ${inspection.propertyTitle}` : ''
+        }. What time works best for you?`
+      : `${greeting} Which day works best for the inspection?`
   }
 
   if (/\b(yes|share|send|details|okay|ok|please|pls)\b/i.test(message)) {

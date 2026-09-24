@@ -558,6 +558,7 @@ export class ContactService {
   UPDATE "contacts"
   SET
     schedule_event = NULL,
+    conversation_state = NULL,
     last_message_received = NOW(),
     total_messages = 0,
     needs_review = FALSE,

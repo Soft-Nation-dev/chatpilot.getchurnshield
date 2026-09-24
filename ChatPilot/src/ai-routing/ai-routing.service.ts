@@ -54,7 +54,6 @@ export class AiRoutingService {
       const startedAt = Date.now()
       try {
         const model = this.providers.createModel(candidate)
-        const toolCountBefore = executedTools.length
         const tools = executedTools.length
           ? undefined
           : this.trackToolExecutions(options.tools, executedTools)
@@ -76,38 +75,20 @@ export class AiRoutingService {
           ...(tools === undefined ? {} : { tools }),
           temperature: options.temperature,
           maxOutputTokens: options.maxOutputTokens,
-          stopWhen:
-            candidate.provider === 'cloudflare' && tools
-              ? stepCountIs(1)
-              : options.maxSteps
-                ? stepCountIs(options.maxSteps)
-                : undefined,
+          stopWhen: options.maxSteps
+            ? stepCountIs(options.maxSteps)
+            : undefined,
           abortSignal: AbortSignal.timeout(candidate.timeoutMs),
         } as any)
 
-        const handedOffToolResult =
-          candidate.provider === 'cloudflare' &&
-          executedTools.length > toolCountBefore &&
-          !result.text?.trim()
-        if (handedOffToolResult) {
-          await this.recordAttempt({
-            options,
-            candidate,
-            status: 'handoff',
-            latencyMs: Date.now() - startedAt,
-            fallbackIndex: index,
-            usage: result.usage,
-          })
-          this.closeCircuit(candidate.provider)
-          continue
-        }
-
-        const customerText = [
+        const generatedText = [
           AiWorkload.LiveChat,
           AiWorkload.MultimodalChat,
         ].includes(options.workload)
           ? sanitizeCustomerOutput(result.text)
           : result.text?.trim()
+        const customerText =
+          generatedText || this.customerReplyFromToolResults(executedTools)
         if (!customerText) {
           throw new Error('Provider returned no customer-facing response')
         }
@@ -163,6 +144,22 @@ export class AiRoutingService {
             toolExecutions: executedTools.length,
           }),
         )
+
+        const recoveredText = this.customerReplyFromToolResults(executedTools)
+        if (recoveredText) {
+          this.closeCircuit(candidate.provider)
+          return {
+            text: recoveredText,
+            usage: {
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+            } as any,
+            provider: candidate.provider,
+            model: candidate.model,
+            fallbackIndex: index,
+          }
+        }
       }
     }
 
@@ -301,6 +298,50 @@ export class AiRoutingService {
         ]
       }),
     ) as ToolSet
+  }
+
+  private customerReplyFromToolResults(
+    executions: ToolExecution[],
+  ): string | null {
+    const last = executions[executions.length - 1]
+    if (!last) return null
+    const serialized =
+      typeof last.result === 'string'
+        ? last.result
+        : JSON.stringify(last.result || '')
+
+    if (/"state":"awaiting_human"/.test(serialized)) {
+      return 'I’ve saved your inspection request. Our team is confirming the available time and will get back to you shortly.'
+    }
+    if (last.name === 'book_appointment') {
+      return /booked successfully/i.test(serialized)
+        ? serialized
+        : 'I’ve saved your inspection request. Our team will confirm the booking shortly.'
+    }
+    if (last.name === 'cancel_appointment') {
+      return /cancelled successfully/i.test(serialized)
+        ? serialized
+        : 'I’ve saved your cancellation request. Our team will confirm it shortly.'
+    }
+    if (last.name !== 'get_available_slots') return null
+
+    try {
+      const parsed = JSON.parse(serialized)
+      if (!parsed?.success || !parsed?.slots) return null
+      const times = Object.values(parsed.slots)
+        .flatMap((slots: any) => slots)
+        .map((slot: any) => slot?.time || slot?.start)
+        .filter(Boolean)
+        .slice(0, 6)
+      if (!times.length) {
+        return 'I couldn’t find an open inspection time in that range. What other day would work for you?'
+      }
+      return `These inspection times are available:\n${times
+        .map((time: string) => `• ${time}`)
+        .join('\n')}\nWhich one works best for you?`
+    } catch {
+      return null
+    }
   }
 
   private isCircuitOpen(provider: AiProviderName): boolean {

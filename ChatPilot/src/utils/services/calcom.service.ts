@@ -4,6 +4,12 @@ import { companies } from '@prisma/client'
 import { Contact } from '../constants/types'
 import { DatesHelper } from './dates.service'
 
+export type CalendarAvailabilityResult = {
+  success: boolean
+  slots: Record<string, Array<{ start: string; time: string }>>
+  error: string | null
+}
+
 @Injectable()
 export class CalComService {
   private readonly logger = new Logger(CalComService.name)
@@ -15,39 +21,60 @@ export class CalComService {
     company: companies,
     startDate: string,
     endDate: string,
-  ): Promise<Record<string, any> | string> {
-    const url = `${this.baseUrl}/slots/available`
+  ): Promise<CalendarAvailabilityResult> {
+    const url = `${this.baseUrl}/slots`
 
-    const params = {
-      duration: company.cal_booking_length?.toString(),
-      startTime: startDate,
-      endTime: endDate,
-      eventTypeId: company.cal_event_type_id?.toString(),
-      eventTypeSlug: company.cal_event_slug,
+    const params: Record<string, string | number> = {
+      start: startDate,
+      end: endDate,
+    }
+    if (company.cal_booking_length) {
+      params.duration = company.cal_booking_length.toString()
+    }
+    if (company.cal_event_type_id) {
+      params.eventTypeId = company.cal_event_type_id.toString()
+    } else if (company.cal_event_slug) {
+      params.eventTypeSlug = company.cal_event_slug
     }
 
     const headers = {
       Authorization: `Bearer ${company.cal_api_key}`,
       'Content-Type': 'application/json',
-      'cal-api-version': '2024-08-13',
+      'cal-api-version': '2024-09-04',
     }
 
     const config: AxiosRequestConfig = { headers, params }
 
     try {
       const response = await axios.get(url, config)
-      const slots = response.data?.data?.slots || {}
-      const formatted = {}
+      const slots = response.data?.data || {}
+      const formatted: Record<
+        string,
+        Array<{ start: string; time: string }>
+      > = {}
       for (const [date, times] of Object.entries(slots)) {
-        formatted[date] = (times as any[]).map((time: any) => {
-          const localTime = this.datesHelper.convertFromZulu(time.time)
-          return { time: localTime }
-        })
+        formatted[date] = (times as any[])
+          .map((slot: any) => slot?.start)
+          .filter(Boolean)
+          .map((start: string) => ({
+            start,
+            time: String(this.datesHelper.convertFromZulu(start)),
+          }))
       }
-      return formatted
+      return { success: true, slots: formatted, error: null }
     } catch (error: any) {
-      this.logger.error('Failed to fetch available slots', error?.message)
-      return 'Failed to fetch available slots'
+      const status = error?.response?.status
+      const detail = error?.response?.data?.error?.message
+      this.logger.error(
+        `Failed to fetch available slots${status ? ` (${status})` : ''}: ${
+          detail || error?.message || 'unknown error'
+        }`,
+      )
+      return {
+        success: false,
+        slots: {},
+        error: detail || error?.message || 'calendar unavailable',
+      }
     }
   }
 
@@ -69,7 +96,7 @@ export class CalComService {
     const headers = {
       Authorization: `Bearer ${company.cal_api_key}`,
       'Content-Type': 'application/json',
-      'cal-api-version': '2024-08-13',
+      'cal-api-version': '2026-02-25',
     }
 
     const payload = {

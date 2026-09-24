@@ -76,6 +76,7 @@ model contacts {
   name                  String?    @db.VarChar
   phone                 BigInt?
   schedule_event        Json?      @db.Json
+  conversation_state    Json?      @db.Json
   last_message_received DateTime   @default(now()) @db.Timestamptz(6)
   total_messages        Int        @default(0)
   needs_review          Boolean    @default(false)

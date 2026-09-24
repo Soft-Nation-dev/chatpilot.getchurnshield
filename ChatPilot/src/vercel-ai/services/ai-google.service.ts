@@ -24,6 +24,7 @@ export class AiGoogleService {
   async processMessage(
     contact: Contact,
     chatHistory: AiChatMessage[],
+    conversationStateContext: string = '',
   ): Promise<{
     text: string
     usage: LanguageModelUsage
@@ -57,12 +58,15 @@ export class AiGoogleService {
       const nowInCompanyTimezone = this.datesHelper.localNow()
       const systemPrompt = `${assistant.systemPrompt}
       ${this.buildLeadMemory(contact)}
+      ${conversationStateContext}
       ## Customer-facing response contract
       Your visible response is sent directly to the customer on WhatsApp.
       - Never print tool names, tool arguments, JSON, code fences, analysis, or reasoning.
       - Use tools silently, then send one polished natural-language reply.
       - Do not repeat a question whose answer is already in the conversation or Existing lead memory.
       - Acknowledge the facts the buyer just supplied and ask only the single most useful missing question.
+      - Scheduling is a state machine: property, day, time, name, email, availability, then booking. Never move backwards or ask for a saved field again.
+      - Once an inspection is booked or awaiting team confirmation, close naturally without asking another qualification or scheduling question.
       - Never invent listings, prices, fees, policies, availability, or business claims. If verified data is absent, say you will confirm with the team.
       - Avoid markdown tables. Keep the answer concise and readable in WhatsApp.
       [System message: This message was sent on ${this.datesHelper.localWeekdayName()} ${nowInCompanyTimezone}

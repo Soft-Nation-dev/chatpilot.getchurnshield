@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { ContactService } from 'src/contact/contact.service'
 import { Contact } from 'src/utils/constants/types'
 import { AiGoogleService } from 'src/vercel-ai/services/ai-google.service'
+import { ConversationStateService } from './conversation-state.service'
 
 const MAX_MESSAGES = 50
 
@@ -12,6 +13,7 @@ export class UnifiedMessageProcessingService {
   constructor(
     private readonly AiGeminiService: AiGoogleService,
     private readonly contactService: ContactService,
+    private readonly conversationStateService: ConversationStateService,
   ) {}
 
   async processClientMessage(
@@ -45,9 +47,21 @@ export class UnifiedMessageProcessingService {
 
     this.logger.log(`Routing AI request for company ${companyId}`)
 
+    // Use original contact with companies relation, update total_messages
+    const contactWithCompanies = {
+      ...contact,
+      ...updatedContact,
+      companies: contact.companies,
+    } as Contact
+
     const chatHistory = await this.contactService.getAiChatHistoryMultimodal(
       contact.id,
       true,
+    )
+    const preparedTurn = await this.conversationStateService.prepareTurn(
+      contactWithCompanies,
+      text,
+      chatHistory,
     )
     chatHistory.push({
       role: 'user',
@@ -59,16 +73,17 @@ export class UnifiedMessageProcessingService {
       ],
     })
 
-    // Use original contact with companies relation, update total_messages
-    const contactWithCompanies = {
-      ...contact,
-      ...updatedContact,
-      companies: contact.companies,
-    } as Contact
+    if (preparedTurn.deterministicReply) {
+      this.logger.log(
+        `Conversation state handled scheduling turn for contact ${contact.id}`,
+      )
+      return preparedTurn.deterministicReply
+    }
 
     const response = await this.AiGeminiService.processMessage(
       contactWithCompanies,
       chatHistory,
+      preparedTurn.systemContext,
     )
 
     return response.text

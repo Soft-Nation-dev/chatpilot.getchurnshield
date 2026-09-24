@@ -57,9 +57,13 @@ export class ReplyProcessor extends WorkerHost {
             `All AI providers failed for contact ${contact.id}`,
             error instanceof Error ? error.stack : String(error),
           )
-          openAIMessage =
-            process.env.AI_UNAVAILABLE_REPLY ||
-            buildDegradedReply(contact as Contact, combinedMessages)
+          const latestContact = await this.contactService.getContactById(
+            contact.id,
+          )
+          openAIMessage = buildDegradedReply(
+            latestContact || (contact as Contact),
+            combinedMessages,
+          )
           degradedReply = true
           await this.contactService.updateContact(contact.id, {
             needs_review: true,
@@ -80,7 +84,9 @@ export class ReplyProcessor extends WorkerHost {
         }
         const safeReply = sanitizeCustomerOutput(openAIMessage)
         if (!safeReply) {
-          this.logger.error(`Unsafe or empty AI reply blocked for contact ${contact.id}`)
+          this.logger.error(
+            `Unsafe or empty AI reply blocked for contact ${contact.id}`,
+          )
           await this.contactService.updateContact(contact.id, {
             needs_review: true,
           })

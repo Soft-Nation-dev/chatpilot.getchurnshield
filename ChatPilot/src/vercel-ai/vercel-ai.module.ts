@@ -7,6 +7,7 @@ import { AiToolsService } from './services/ai-tools.service'
 import { UnifiedMessageProcessingService } from './services/unified-message-processing.service'
 import { AiController } from './ai.controller'
 import { AiAssistantConfigService } from 'src/vercel-ai/services/ai-assistant-config.service'
+import { ConversationStateService } from './services/conversation-state.service'
 
 @Module({
   controllers: [AiController],
@@ -16,12 +17,14 @@ import { AiAssistantConfigService } from 'src/vercel-ai/services/ai-assistant-co
     AiToolsService,
     UnifiedMessageProcessingService,
     AiAssistantConfigService,
+    ConversationStateService,
   ],
   exports: [
     AiGoogleService,
     AiToolsService,
     UnifiedMessageProcessingService,
     AiAssistantConfigService,
+    ConversationStateService,
   ],
 })
 export class VercelAiModule {}

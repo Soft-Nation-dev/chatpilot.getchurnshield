@@ -10,6 +10,7 @@ import {
 } from 'src/utils/constants/types'
 import { PrismaService } from 'src/prisma/prisma.service'
 import { CalComService } from 'src/utils/services/calcom.service'
+import { ConversationStateService } from './conversation-state.service'
 
 @Injectable()
 export class AiToolsService {
@@ -21,6 +22,7 @@ export class AiToolsService {
     private readonly datesHelperService: DatesHelper,
     private readonly prisma: PrismaService,
     private readonly calComService: CalComService,
+    private readonly conversationStateService: ConversationStateService,
   ) {}
 
   getContactTools(contact: Contact, excludeTools: AiSdkToolsNames[] = []) {
@@ -341,16 +343,47 @@ export class AiToolsService {
               endDate,
             )
 
-            if (typeof result === 'string') {
-              return result
+            if (!result.success) {
+              await this.conversationStateService.recordCalendarFailure(
+                contact,
+                result.error || 'calendar unavailable',
+              )
+              await this.contactService
+                .sendMessageToCompany(
+                  contact,
+                  `Inspection request needs confirmation for ${
+                    contact.name ||
+                    contact.whatsapp_profile_name ||
+                    `+${contact.phone}`
+                  }. The calendar could not verify slots for ${startDate} to ${endDate}.`,
+                )
+                .catch(error =>
+                  this.logger.warn(
+                    `Failed to notify company about calendar handoff: ${error?.message}`,
+                  ),
+                )
+              return JSON.stringify({
+                success: false,
+                state: 'awaiting_human',
+                customerInstruction:
+                  'Tell the customer their inspection request is saved and the team will confirm the available time shortly. Do not ask for the day, property, or time again.',
+              })
             }
+
+            const slotStarts = Object.values(result.slots)
+              .flat()
+              .map(slot => slot.start)
+            await this.conversationStateService.recordAvailableSlots(
+              contact.id,
+              slotStarts,
+            )
 
             this.logger.log('tool call finished', {
               context: 'get_available_slots',
               result: 'success',
             })
 
-            return JSON.stringify(result)
+            return JSON.stringify({ success: true, slots: result.slots })
           } catch (error) {
             this.logger.error('tool call failed', {
               context: 'get_available_slots',
@@ -404,6 +437,10 @@ export class AiToolsService {
                 crm_appointment_id: result.data?.data?.uid || null,
                 crm_appointment_at: new Date(),
               })
+              await this.conversationStateService.recordBooked(
+                contact.id,
+                result.date || date,
+              )
 
               this.logger.log('tool call finished', {
                 context: 'book_appointment',
@@ -413,7 +450,30 @@ export class AiToolsService {
               return `Appointment booked successfully for ${result.date || date}.`
             }
 
-            return `Booking failed: ${result.error}`
+            await this.conversationStateService.recordCalendarFailure(
+              contact,
+              result.error || 'booking failed',
+            )
+            await this.contactService
+              .sendMessageToCompany(
+                contact,
+                `Inspection booking needs manual confirmation for ${
+                  contact.name ||
+                  contact.whatsapp_profile_name ||
+                  `+${contact.phone}`
+                } at ${date}.`,
+              )
+              .catch(error =>
+                this.logger.warn(
+                  `Failed to notify company about booking handoff: ${error?.message}`,
+                ),
+              )
+            return JSON.stringify({
+              success: false,
+              state: 'awaiting_human',
+              customerInstruction:
+                'Tell the customer the request is saved and the team will confirm it shortly. Do not ask for the same details again.',
+            })
           } catch (error) {
             this.logger.error('tool call failed', {
               context: 'book_appointment',
@@ -460,6 +520,7 @@ export class AiToolsService {
                 schedule_event: null,
                 crm_appointment_id: null,
               })
+              await this.conversationStateService.clearInspection(contact.id)
 
               this.logger.log('tool call finished', {
                 context: 'cancel_appointment',

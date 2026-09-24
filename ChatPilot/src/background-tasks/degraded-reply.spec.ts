@@ -18,4 +18,42 @@ describe('buildDegradedReply', () => {
     expect(reply).not.toMatch(/assistant|provider|unavailable|error/i)
     expect(reply).toMatch(/property name|location/i)
   })
+
+  it('uses persisted inspection facts instead of asking the day again', () => {
+    const reply = buildDegradedReply(
+      {
+        ...contact,
+        conversation_state: {
+          version: 1,
+          inspection: {
+            status: 'collecting_time',
+            propertyTitle: 'Demo 4-Bedroom Fully Detached Duplex',
+            requestedDay: 'Saturday',
+          },
+        },
+      } as any,
+      'I thought we agreed on Saturday?',
+    )
+    expect(reply).toBe(
+      'Saturday is noted for Demo 4-Bedroom Fully Detached Duplex. What time on Saturday works best for you?',
+    )
+  })
+
+  it('closes naturally while a calendar request awaits human confirmation', () => {
+    const reply = buildDegradedReply(
+      {
+        ...contact,
+        conversation_state: {
+          version: 1,
+          inspection: {
+            status: 'awaiting_human',
+            requestedDay: 'Saturday',
+          },
+        },
+      } as any,
+      'Okay',
+    )
+    expect(reply).toMatch(/team is confirming/i)
+    expect(reply).not.toMatch(/what day|what time|which property/i)
+  })
 })
