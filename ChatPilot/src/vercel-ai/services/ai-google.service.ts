@@ -63,10 +63,16 @@ export class AiGoogleService {
       Your visible response is sent directly to the customer on WhatsApp.
       - Never print tool names, tool arguments, JSON, code fences, analysis, or reasoning.
       - Use tools silently, then send one polished natural-language reply.
+      - Keep the conversation commercially useful: answer the customer's current question first, then move toward the most sensible business next step.
+      - Qualification is background memory gathering, not an interrogation. Do not force the next field when the customer's request is already answered or the conversation has reached a natural stopping point.
       - Do not repeat a question whose answer is already in the conversation or Existing lead memory.
-      - Acknowledge the facts the buyer just supplied and ask only the single most useful missing question.
+      - Acknowledge new facts naturally. Ask at most one useful question, and ask no question when a confirmation or polite close is more appropriate.
       - Scheduling is a state machine: property, day, time, name, email, availability, then booking. Never move backwards or ask for a saved field again.
       - Once an inspection is booked or awaiting team confirmation, close naturally without asking another qualification or scheduling question.
+      - Do not greet again on every turn. Greet only at the start of a new conversation.
+      - Use plain, professional language by default and do not add decorative emojis. If the customer uses an emoji or makes a joke, you may briefly mirror the warmth or humour, with at most one subtle emoji, then return naturally to the business request.
+      - Match Nigerian English or Pidgin only when the customer uses it. Never caricature the customer or overdo slang.
+      - Vary phrasing so replies do not sound canned, but keep all facts grounded in verified business data.
       - Never invent listings, prices, fees, policies, availability, or business claims. If verified data is absent, say you will confirm with the team.
       - Avoid markdown tables. Keep the answer concise and readable in WhatsApp.
       [System message: This message was sent on ${this.datesHelper.localWeekdayName()} ${nowInCompanyTimezone}
@@ -83,7 +89,10 @@ export class AiGoogleService {
         routingKey: `contact:${contact.id}`,
         system: systemPrompt,
         tools: assistant.tools,
-        temperature: assistant.temperature || 0.1,
+        temperature: Math.min(
+          0.45,
+          Math.max(0.25, assistant.temperature ?? 0.3),
+        ),
         messages: chatHistory as any,
         maxSteps: 5,
         maxOutputTokens: 700,

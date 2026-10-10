@@ -25,6 +25,7 @@ import { SocialModule } from './social/social.module'
 import { ContentModule } from './content/content.module'
 import { LearningModule } from './learning/learning.module'
 import { AiRoutingModule } from './ai-routing/ai-routing.module'
+import { NotificationsModule } from './notifications/notifications.module'
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { AiRoutingModule } from './ai-routing/ai-routing.module'
     ...(process.env.SENTRY_DSN ? [SentryModule.forRoot()] : []),
     PrismaModule,
     AiRoutingModule,
+    NotificationsModule,
 
     WebhookModule,
     BackgroundTasksModule,

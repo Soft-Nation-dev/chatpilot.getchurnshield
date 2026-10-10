@@ -4,6 +4,7 @@ import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
 import { PrismaService } from 'src/prisma/prisma.service'
 import { UpdateContentAutomationDto } from '../dto/content.dto'
 import { ContentGeneratorService } from './content-generator.service'
+import { NotificationsService } from 'src/notifications/notifications.service'
 
 const DEFAULT_TIMES = ['09:00', '18:00', '20:00']
 const DEFAULT_DAYS = [1, 2, 3, 4, 5, 6, 7]
@@ -15,6 +16,7 @@ export class ContentAutomationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly generator: ContentGeneratorService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async getSettings(companyId: number) {
@@ -247,6 +249,19 @@ export class ContentAutomationService {
         automationGenerated: true,
       })
       created.push(post)
+    }
+
+    if (created.length) {
+      await this.notifications.create({
+        companyId,
+        type: 'content_drafts_ready',
+        severity: 'success',
+        title: `${created.length} content draft${created.length === 1 ? '' : 's'} ready`,
+        message:
+          'Your automatic content plan has been prepared and is waiting for approval.',
+        entity: 'content',
+        dedupeKey: `content-plan:${localDate}`,
+      })
     }
 
     return {

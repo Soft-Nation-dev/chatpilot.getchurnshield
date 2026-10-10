@@ -201,15 +201,31 @@ export class ContentGeneratorService {
     if (!raw) return null
     const start = raw.indexOf('{')
     const end = raw.lastIndexOf('}')
-    if (start === -1 || end === -1 || end <= start) return null
-
-    try {
-      const parsed = JSON.parse(raw.slice(start, end + 1))
-      const caption = String(parsed.caption || '').trim()
-      if (!caption) return null
-      return { caption, hashtags: String(parsed.hashtags || '').trim() }
-    } catch {
-      return null
+    if (start !== -1 && end !== -1 && end > start) {
+      try {
+        const parsed = JSON.parse(raw.slice(start, end + 1))
+        const caption = String(parsed.caption || '').trim()
+        if (caption) {
+          return { caption, hashtags: String(parsed.hashtags || '').trim() }
+        }
+      } catch {
+        // Fall through to the guarded text parser below.
+      }
     }
+
+    const clean = raw
+      .replace(/```(?:json)?/gi, '')
+      .replace(/^\s*(?:caption|post)\s*:\s*/i, '')
+      .trim()
+    if (!clean || clean.startsWith('[') || clean.startsWith('{')) return null
+    const hashStart = clean.search(/(?:^|\n)\s*#\w/)
+    const caption = (hashStart >= 0 ? clean.slice(0, hashStart) : clean).trim()
+    const hashtags = (hashStart >= 0 ? clean.slice(hashStart) : '')
+      .split(/\s+/)
+      .filter(item => /^#[\p{L}\p{N}_]+$/u.test(item))
+      .slice(0, 12)
+      .join(' ')
+    if (caption.length < 20 || caption.length > 4000) return null
+    return { caption, hashtags }
   }
 }

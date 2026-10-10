@@ -1,7 +1,10 @@
 import { ContentAutomationService } from './content-automation.service'
 
 describe('ContentAutomationService', () => {
+  const notifications = { create: jest.fn().mockResolvedValue({}) }
+
   beforeEach(() => {
+    jest.clearAllMocks()
     jest.useFakeTimers().setSystemTime(new Date('2026-09-15T05:00:00.000Z'))
   })
 
@@ -55,6 +58,7 @@ describe('ContentAutomationService', () => {
     const service = new ContentAutomationService(
       prisma as any,
       generator as any,
+      notifications as any,
     )
 
     const result = await service.planCompany(7)
@@ -105,6 +109,7 @@ describe('ContentAutomationService', () => {
     const service = new ContentAutomationService(
       prisma as any,
       generator as any,
+      notifications as any,
     )
 
     const result = await service.planCompany(7)
@@ -155,6 +160,7 @@ describe('ContentAutomationService', () => {
     const service = new ContentAutomationService(
       prisma as any,
       generator as any,
+      notifications as any,
     )
 
     const result = await service.planCompany(7)
@@ -198,6 +204,7 @@ describe('ContentAutomationService', () => {
     const service = new ContentAutomationService(
       prisma as any,
       generator as any,
+      notifications as any,
     )
 
     const result = await service.planCompany(7)

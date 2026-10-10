@@ -9,6 +9,7 @@ import { WhatsAppFormatter } from '../../utils/services/whatsapp-formatter.helpe
 import { messages } from '@prisma/client'
 import { buildDegradedReply } from '../degraded-reply'
 import { sanitizeCustomerOutput } from 'src/ai-routing/customer-output-guard'
+import { NotificationsService } from 'src/notifications/notifications.service'
 
 @Processor(BackgroundQueue.REPLIES, { concurrency: 1 })
 export class ReplyProcessor extends WorkerHost {
@@ -17,6 +18,7 @@ export class ReplyProcessor extends WorkerHost {
     private readonly contactService: ContactService,
     private readonly messageProcessingService: UnifiedMessageProcessingService,
     private readonly WaFormattingService: WhatsAppFormatter,
+    private readonly notifications: NotificationsService,
   ) {
     super()
   }
@@ -67,6 +69,18 @@ export class ReplyProcessor extends WorkerHost {
           degradedReply = true
           await this.contactService.updateContact(contact.id, {
             needs_review: true,
+          })
+          const hour = new Date().toISOString().slice(0, 13)
+          await this.notifications.create({
+            companyId: company.id,
+            type: 'chat_handoff',
+            severity: 'warning',
+            title: 'Conversation needs attention',
+            message:
+              'The AI providers could not complete a reliable reply, so a safe response was sent and this conversation was flagged for review.',
+            entity: 'chat',
+            entityId: contact.id,
+            dedupeKey: `chat-handoff:${contact.id}:${hour}`,
           })
         }
 

@@ -3,6 +3,7 @@ import { PrismaService } from 'src/prisma/prisma.service'
 import { GraphApiService } from 'src/social/services/graph-api.service'
 import { SocialAccountService } from 'src/social/services/social-account.service'
 import { SOCIAL_PLATFORM } from 'src/social/constants/social.constants'
+import { NotificationsService } from 'src/notifications/notifications.service'
 
 const PUBLISH_ENABLED =
   (process.env.CONTENT_PUBLISH_ENABLED || 'true') !== 'false'
@@ -15,6 +16,7 @@ export class ContentPublisherService {
     private readonly prisma: PrismaService,
     private readonly graph: GraphApiService,
     private readonly socialAccountService: SocialAccountService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async publish(postId: number): Promise<string> {
@@ -25,7 +27,11 @@ export class ContentPublisherService {
     if (!post) return 'not_found'
 
     if (!PUBLISH_ENABLED) {
-      await this.fail(postId, 'publishing disabled by configuration')
+      await this.fail(
+        postId,
+        'publishing disabled by configuration',
+        post.company_id,
+      )
       return 'disabled'
     }
 
@@ -34,7 +40,7 @@ export class ContentPublisherService {
     })
 
     if (!accounts.length) {
-      await this.fail(postId, 'no connected social account')
+      await this.fail(postId, 'no connected social account', post.company_id)
       return 'no_account'
     }
 
@@ -119,7 +125,11 @@ export class ContentPublisherService {
     }
 
     if (!fbPostId && !igPostId) {
-      await this.fail(postId, errors.join(' | ') || 'no platform published')
+      await this.fail(
+        postId,
+        errors.join(' | ') || 'no platform published',
+        post.company_id,
+      )
       return 'failed'
     }
 
@@ -141,6 +151,23 @@ export class ContentPublisherService {
     const completedAllRequestedPlatforms =
       (!wantsFacebook || Boolean(fbPostId)) &&
       (!wantsInstagram || Boolean(igPostId))
+
+    await this.notifications.create({
+      companyId: post.company_id,
+      type: completedAllRequestedPlatforms
+        ? 'content_published'
+        : 'content_partially_published',
+      severity: completedAllRequestedPlatforms ? 'success' : 'warning',
+      title: completedAllRequestedPlatforms
+        ? 'Content published'
+        : 'Content partially published',
+      message: completedAllRequestedPlatforms
+        ? 'Your approved post was published to every selected platform.'
+        : `The post was published to at least one platform, but another platform needs attention: ${errors.join(' | ')}`,
+      entity: 'content',
+      entityId: postId,
+      dedupeKey: `content-publish:${postId}:${completedAllRequestedPlatforms ? 'complete' : 'partial'}`,
+    })
 
     return completedAllRequestedPlatforms ? 'published' : 'partially_published'
   }
@@ -180,10 +207,22 @@ export class ContentPublisherService {
     return first ?? null
   }
 
-  private async fail(postId: number, reason: string) {
+  private async fail(postId: number, reason: string, companyId?: number) {
     await this.prisma.content_posts.update({
       where: { id: postId },
       data: { status: 'failed', error: reason.slice(0, 1000) },
     })
+    if (companyId) {
+      await this.notifications.create({
+        companyId,
+        type: 'content_publish_failed',
+        severity: 'error',
+        title: 'Content publishing needs attention',
+        message: reason,
+        entity: 'content',
+        entityId: postId,
+        dedupeKey: `content-publish:${postId}:failed`,
+      })
+    }
   }
 }
