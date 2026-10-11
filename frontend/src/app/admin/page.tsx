@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
@@ -163,13 +164,13 @@ function StatCard({
   detail?: string
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
             {label}
           </p>
-          <p className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
+          <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
             {Number(value || 0).toLocaleString()}
           </p>
           {detail && <p className="mt-1 text-xs text-slate-500">{detail}</p>}
@@ -437,18 +438,23 @@ export default function AdminPage() {
 
   if (!authed) {
     return (
-      <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
+      <main className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6 sm:py-16">
         <div className="mx-auto flex min-h-[75vh] max-w-md items-center">
-          <div className="w-full rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur">
+          <div className="w-full rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur sm:p-8">
             <div className="mb-8 flex items-center gap-3">
-              <div className="rounded-2xl bg-emerald-500 p-3 text-slate-950">
-                <ShieldAlert className="h-6 w-6" />
-              </div>
+              <Image
+                src="/logo-mark.svg"
+                alt="GetChurnShield"
+                width={52}
+                height={52}
+                className="h-12 w-12 rounded-2xl shadow-lg"
+                priority
+              />
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-400">
                   GetChurnShield
                 </p>
-                <h1 className="text-2xl font-bold">Admin control centre</h1>
+                <h1 className="text-xl font-bold sm:text-2xl">Admin control centre</h1>
               </div>
             </div>
             <p className="mb-6 text-sm leading-relaxed text-slate-400">
@@ -503,25 +509,31 @@ export default function AdminPage() {
   ]
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-900">
+    <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-900">
       <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950 text-white shadow-xl">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-5 py-4 lg:px-8">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between px-3 py-3 sm:px-5 sm:py-4 lg:px-8">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-emerald-500 p-2 text-slate-950">
-              <ShieldAlert className="h-5 w-5" />
-            </div>
+            <Image
+              src="/logo-mark.svg"
+              alt="GetChurnShield"
+              width={44}
+              height={44}
+              className="h-10 w-10 rounded-xl shadow-lg"
+              priority
+            />
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-400">
                 GetChurnShield
               </p>
-              <h1 className="font-bold">Administration</h1>
+              <h1 className="text-sm font-bold sm:text-base">Administration</h1>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={refresh}
               disabled={loading}
-              className="rounded-lg p-2.5 text-slate-300 hover:bg-white/10 hover:text-white"
+              aria-label="Refresh dashboard"
+              className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-300 hover:bg-white/10 hover:text-white"
             >
               <RefreshCw
                 className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
@@ -529,16 +541,18 @@ export default function AdminPage() {
             </button>
             <button
               onClick={signOut}
-              className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/10 hover:text-white"
+              aria-label="Sign out"
+              className="flex h-11 items-center gap-2 rounded-xl border border-white/10 px-3 text-xs font-semibold text-slate-300 hover:bg-white/10 hover:text-white"
             >
-              <LogOut className="h-4 w-4" /> Sign out
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1600px] gap-6 px-5 py-6 lg:grid-cols-[220px_1fr] lg:px-8">
-        <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:sticky lg:top-24">
+      <div className="mx-auto grid max-w-[1600px] gap-4 px-3 py-4 pb-28 sm:gap-6 sm:px-5 sm:py-6 sm:pb-28 lg:grid-cols-[220px_1fr] lg:px-8 lg:pb-6">
+        <aside className="hidden h-fit rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:sticky lg:top-24 lg:block">
           {nav.map((item) => (
             <button
               key={item.id}
@@ -558,7 +572,7 @@ export default function AdminPage() {
           </div>
         </aside>
 
-        <section className="min-w-0 space-y-6">
+        <section className="min-w-0 space-y-4 sm:space-y-6">
           {notice && (
             <div
               className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm ${notice.kind === 'error' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}
@@ -576,11 +590,11 @@ export default function AdminPage() {
                 <p className="text-sm font-medium text-emerald-700">
                   Live platform health
                 </p>
-                <h2 className="text-3xl font-bold tracking-tight">
+                <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
                   System overview
                 </h2>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
                 <StatCard
                   label="Companies"
                   value={overview.totals.companies}
@@ -628,41 +642,46 @@ export default function AdminPage() {
               </div>
 
               <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <div className="mb-6 flex items-center justify-between">
                     <div>
                       <h3 className="font-bold">Message activity</h3>
                       <p className="text-xs text-slate-500">Last 14 days</p>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    <span className="whitespace-nowrap rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                       {overview.last_30_days.messages.toLocaleString()} / 30
                       days
                     </span>
                   </div>
-                  <div className="flex h-52 items-end gap-2">
-                    {overview.daily_activity.map((point) => (
-                      <div
-                        key={point.date}
-                        className="group flex min-w-0 flex-1 flex-col items-center gap-2"
-                      >
-                        <div className="relative flex h-40 w-full items-end justify-center rounded-lg bg-slate-50 px-1">
-                          <div
-                            className="w-full rounded-md bg-emerald-500 transition group-hover:bg-emerald-400"
-                            style={{
-                              height: `${Math.max(4, (point.messages / maxMessages) * 100)}%`,
-                            }}
-                            title={`${point.messages} messages, ${point.signups} signups`}
-                          />
+                  <p className="mb-2 text-[11px] text-slate-400 sm:hidden">
+                    Swipe to inspect all days
+                  </p>
+                  <div className="overflow-x-auto pb-1">
+                    <div className="flex h-52 min-w-[620px] items-end gap-2 sm:min-w-0">
+                      {overview.daily_activity.map((point) => (
+                        <div
+                          key={point.date}
+                          className="group flex min-w-0 flex-1 flex-col items-center gap-2"
+                        >
+                          <div className="relative flex h-40 w-full items-end justify-center rounded-lg bg-slate-50 px-1">
+                            <div
+                              className="w-full rounded-md bg-emerald-500 transition group-hover:bg-emerald-400"
+                              style={{
+                                height: `${Math.max(4, (point.messages / maxMessages) * 100)}%`,
+                              }}
+                              title={`${point.messages} messages, ${point.signups} signups`}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            {point.date.slice(5)}
+                          </span>
                         </div>
-                        <span className="text-[10px] text-slate-400">
-                          {point.date.slice(5)}
-                        </span>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
                   <div className="mb-5 flex items-center gap-2">
                     <Sparkles className="h-5 w-5 text-violet-600" />
                     <div>
@@ -718,24 +737,24 @@ export default function AdminPage() {
                 <p className="text-sm font-medium text-emerald-700">
                   Access and billing control
                 </p>
-                <h2 className="text-3xl font-bold tracking-tight">
+                <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
                   {tab === 'companies' ? 'Companies' : 'Users'}
                 </h2>
               </div>
-              <div className="flex gap-2">
-                <div className="relative">
+              <div className="grid grid-cols-1 gap-2 sm:flex">
+                <div className="relative min-w-0">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <input
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                     placeholder="Search…"
-                    className="h-10 w-56 rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-emerald-500"
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-emerald-500 sm:w-56"
                   />
                 </div>
                 <select
                   value={statusFilter}
                   onChange={(event) => setStatusFilter(event.target.value)}
-                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none sm:w-auto"
                 >
                   <option value="all">All statuses</option>
                   <option value="active">Active</option>
@@ -748,8 +767,9 @@ export default function AdminPage() {
           )}
 
           {tab === 'companies' && (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <table className="w-full min-w-[1100px] text-left text-sm">
+            <>
+              <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
+                <table className="w-full min-w-[1100px] text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="px-4 py-3">Company</th>
@@ -835,13 +855,82 @@ export default function AdminPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+              <div className="space-y-3 md:hidden">
+                {filteredCompanies.map((company) => (
+                  <article
+                    key={company.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate font-bold text-slate-950">
+                          {company.name}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          #{company.id} · {String(company.phone)}
+                        </p>
+                      </div>
+                      <StatusPill value={company.account_status} />
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-slate-400">Subscription</p>
+                        <div className="mt-1">
+                          <StatusPill value={company.subscription_status} />
+                        </div>
+                        <p className="mt-1 truncate font-medium text-slate-600">
+                          {company.subscription_plan}
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-slate-400">Usage</p>
+                        <p className="mt-1 font-bold text-slate-800">
+                          {company.monthly_used} / {company.monthly_lead_quota || 0}
+                        </p>
+                        <p className="text-slate-500">monthly leads</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500">
+                      <span>{company._count.properties} properties</span>
+                      <span>{company._count.company_assets} media</span>
+                      <span>{company._count.contacts} contacts</span>
+                      <span className="flex items-center gap-1">
+                        {company.whatsapp_connection_status ? (
+                          <Wifi className="h-3.5 w-3.5 text-emerald-600" />
+                        ) : (
+                          <WifiOff className="h-3.5 w-3.5" />
+                        )}
+                        {company._count.social_accounts} social
+                      </span>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+                      <p className="text-[11px] text-slate-400">
+                        Last login: {dateLabel(company.last_login_at)}
+                      </p>
+                      <button
+                        onClick={() => openCompany(company)}
+                        className="min-h-11 rounded-xl bg-slate-950 px-4 text-xs font-semibold text-white"
+                      >
+                        Manage
+                      </button>
+                    </div>
+                  </article>
+                ))}
+                {!filteredCompanies.length && (
+                  <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+                    No companies match your filters.
+                  </p>
+                )}
+              </div>
+            </>
           )}
 
           {tab === 'users' && (
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <table className="w-full min-w-[1000px] text-left text-sm">
+            <>
+              <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
+                <table className="w-full min-w-[1000px] text-left text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                   <tr>
                     <th className="px-4 py-3">User</th>
@@ -932,8 +1021,103 @@ export default function AdminPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+              <div className="space-y-3 md:hidden">
+                {filteredUsers.map((user) => (
+                  <article
+                    key={user.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate font-bold text-slate-950">
+                          {user.full_name || 'Unnamed user'}
+                        </h3>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                          {user.phone} · #{user.id}
+                        </p>
+                      </div>
+                      <StatusPill value={user.status} />
+                    </div>
+                    <div className="mt-3 rounded-xl bg-slate-50 p-3">
+                      <p className="text-xs text-slate-400">Company</p>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-semibold">
+                          {user.company.name}
+                        </p>
+                        <StatusPill value={user.company.account_status} />
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <label className="text-xs font-semibold text-slate-500">
+                        Role
+                        <select
+                          value={user.role}
+                          disabled={busy === `user-${user.id}`}
+                          onChange={(event) =>
+                            updateUser(user, {
+                              role: event.target.value as AdminUser['role'],
+                            })
+                          }
+                          className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm capitalize"
+                        >
+                          <option value="owner">Owner</option>
+                          <option value="manager">Manager</option>
+                          <option value="agent">Agent</option>
+                        </select>
+                      </label>
+                      <label className="text-xs font-semibold text-slate-500">
+                        Status
+                        <select
+                          value={user.status}
+                          disabled={busy === `user-${user.id}`}
+                          onChange={(event) =>
+                            updateUser(user, {
+                              status: event.target.value as AdminUser['status'],
+                            })
+                          }
+                          className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm capitalize"
+                        >
+                          <option value="active">Active</option>
+                          <option value="invited">Invited</option>
+                          <option value="suspended">Suspended</option>
+                          <option value="revoked">Revoked</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+                      <button
+                        onClick={() =>
+                          updateUser(user, {
+                            can_view_contact_phone: !user.can_view_contact_phone,
+                          })
+                        }
+                        disabled={busy === `user-${user.id}`}
+                        className={`min-h-11 rounded-xl px-3 text-xs font-semibold ${user.can_view_contact_phone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}
+                      >
+                        Phone: {user.can_view_contact_phone ? 'Allowed' : 'Hidden'}
+                      </button>
+                      <button
+                        onClick={() => revokeSessions(user)}
+                        disabled={busy === `user-${user.id}`}
+                        className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs font-semibold text-amber-700"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" /> Revoke sessions
+                      </button>
+                    </div>
+                    <p className="mt-3 text-[11px] text-slate-400">
+                      Last login: {dateLabel(user.last_login_at)}
+                    </p>
+                  </article>
+                ))}
+                {!filteredUsers.length && (
+                  <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+                    No users match your filters.
+                  </p>
+                )}
+              </div>
+            </>
           )}
 
           {tab === 'audit' && (
@@ -942,12 +1126,14 @@ export default function AdminPage() {
                 <p className="text-sm font-medium text-emerald-700">
                   Accountability
                 </p>
-                <h2 className="text-3xl font-bold tracking-tight">Audit log</h2>
+                <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                  Audit log
+                </h2>
                 <p className="mt-1 text-sm text-slate-500">
                   Administrative and workspace security events, newest first.
                 </p>
               </div>
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
                 <table className="w-full min-w-[900px] text-left text-sm">
                   <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                     <tr>
@@ -992,34 +1178,113 @@ export default function AdminPage() {
                   </tbody>
                 </table>
               </div>
+              <div className="space-y-3 md:hidden">
+                {audit.map((row) => (
+                  <article
+                    key={row.id}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">
+                          {row.company_name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          {dateLabel(row.created_at)}
+                        </p>
+                      </div>
+                      <StatusPill value={row.action} />
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs">
+                      <div>
+                        <p className="text-slate-400">Target</p>
+                        <p className="mt-1 font-medium text-slate-700">
+                          {row.entity || 'system'}{' '}
+                          {row.entity_id ? `#${row.entity_id}` : ''}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400">IP address</p>
+                        <p className="mt-1 truncate font-mono text-slate-700">
+                          {row.ip || '—'}
+                        </p>
+                      </div>
+                    </div>
+                    {row.meta != null && (
+                      <details className="mt-3 text-xs">
+                        <summary className="cursor-pointer font-semibold text-slate-600">
+                          View event details
+                        </summary>
+                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-slate-950 p-3 text-[10px] text-slate-300">
+                          {JSON.stringify(row.meta, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                  </article>
+                ))}
+                {!audit.length && (
+                  <p className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+                    No audit events recorded yet.
+                  </p>
+                )}
+              </div>
             </>
           )}
         </section>
       </div>
 
+      <nav
+        aria-label="Admin sections"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pt-2 shadow-[0_-10px_30px_rgba(15,23,42,0.1)] backdrop-blur lg:hidden"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)' }}
+      >
+        <div className="mx-auto grid max-w-lg grid-cols-4 gap-1">
+          {nav.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setTab(item.id)
+                setSearch('')
+                setStatusFilter('all')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+              aria-current={tab === item.id ? 'page' : undefined}
+              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-semibold transition ${tab === item.id ? 'bg-slate-950 text-white' : 'text-slate-500'}`}
+            >
+              <item.icon className="h-5 w-5" />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+
       {selectedCompany && companyForm && (
         <div
-          className="fixed inset-0 z-50 flex justify-end bg-slate-950/45 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-end justify-end bg-slate-950/45 backdrop-blur-sm sm:items-stretch"
           onMouseDown={(event) =>
             event.target === event.currentTarget && setSelectedCompany(null)
           }
         >
-          <div className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-6 py-5 backdrop-blur">
+          <div className="h-[94dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:h-full sm:rounded-none">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-6 sm:py-5">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
                   Company #{selectedCompany.id}
                 </p>
-                <h3 className="text-xl font-bold">{selectedCompany.name}</h3>
+                <h3 className="max-w-[250px] truncate text-lg font-bold sm:max-w-none sm:text-xl">
+                  {selectedCompany.name}
+                </h3>
               </div>
               <button
                 onClick={() => setSelectedCompany(null)}
-                className="rounded-lg p-2 hover:bg-slate-100"
+                aria-label="Close company editor"
+                className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-slate-100"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="space-y-7 p-6">
+            <div className="space-y-5 p-4 sm:space-y-7 sm:p-6">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-xs font-semibold text-slate-600">
                   Company name
@@ -1296,17 +1561,20 @@ export default function AdminPage() {
                 </div>
               </div>
             </div>
-            <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+            <div
+              className="sticky bottom-0 grid grid-cols-2 gap-2 border-t border-slate-200 bg-white px-4 pt-3 sm:flex sm:items-center sm:justify-end sm:gap-3 sm:px-6 sm:py-4"
+              style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}
+            >
               <button
                 onClick={() => setSelectedCompany(null)}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold"
+                className="min-h-12 rounded-xl border border-slate-200 px-4 text-sm font-semibold sm:min-h-0 sm:py-2.5"
               >
                 Cancel
               </button>
               <button
                 onClick={saveCompany}
                 disabled={busy === `company-${selectedCompany.id}`}
-                className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+                className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white disabled:opacity-50 sm:min-h-0 sm:px-5 sm:py-2.5"
               >
                 <Save className="h-4 w-4" /> {busy ? 'Saving…' : 'Save changes'}
               </button>
