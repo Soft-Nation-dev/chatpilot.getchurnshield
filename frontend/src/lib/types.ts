@@ -24,6 +24,19 @@ export interface Company {
   session_id: string | null
   business_details: BusinessDetails | null
   assistant_id: number | null
+  account_status: 'active' | 'suspended'
+  subscription_plan: string
+  subscription_status:
+    | 'pending'
+    | 'trialing'
+    | 'active'
+    | 'past_due'
+    | 'cancelled'
+    | 'expired'
+  subscription_started_at: string | null
+  subscription_expires_at: string | null
+  suspended_at: string | null
+  suspension_reason: string | null
 }
 
 export interface Lead {

@@ -84,6 +84,13 @@ export class AuthService {
         role: true,
         status: true,
         token_version: true,
+        company: {
+          select: {
+            account_status: true,
+            subscription_status: true,
+            subscription_expires_at: true,
+          },
+        },
       },
     })
 
@@ -99,6 +106,8 @@ export class AuthService {
     if (user.status !== 'active') {
       throw new UnauthorizedException('This account is no longer active')
     }
+
+    this.assertCompanyAccess(user.company)
 
     await this.prisma.users.update({
       where: { id: user.id },
@@ -124,6 +133,13 @@ export class AuthService {
           role: true,
           status: true,
           token_version: true,
+          company: {
+            select: {
+              account_status: true,
+              subscription_status: true,
+              subscription_expires_at: true,
+            },
+          },
         },
       })
 
@@ -134,6 +150,8 @@ export class AuthService {
       if (payload.tv !== undefined && payload.tv !== user.token_version) {
         throw new UnauthorizedException('Invalid refresh token')
       }
+
+      this.assertCompanyAccess(user.company)
 
       return this.generateTokens(user)
     } catch {
@@ -379,5 +397,26 @@ export class AuthService {
     })
 
     return { access_token, refresh_token }
+  }
+
+  private assertCompanyAccess(company: {
+    account_status: string
+    subscription_status: string
+    subscription_expires_at: Date | null
+  }) {
+    if (company.account_status === 'suspended') {
+      throw new UnauthorizedException(
+        'This workspace has been suspended. Please contact support.',
+      )
+    }
+    if (
+      ['active', 'trialing'].includes(company.subscription_status) &&
+      company.subscription_expires_at &&
+      company.subscription_expires_at < new Date()
+    ) {
+      throw new UnauthorizedException(
+        'This workspace subscription has expired. Please renew to continue.',
+      )
+    }
   }
 }

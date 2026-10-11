@@ -4,14 +4,22 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common'
+import { timingSafeEqual } from 'node:crypto'
 import { scraperConfig } from '../leads/scrapers/scraper-config'
 
 @Injectable()
 export class AdminSecretGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest()
-    const secret = req.headers['x-admin-secret']
-    if (!scraperConfig.adminSecret || secret !== scraperConfig.adminSecret) {
+    const supplied = String(req.headers['x-admin-secret'] || '')
+    const configured = scraperConfig.adminSecret
+    const suppliedBuffer = Buffer.from(supplied)
+    const configuredBuffer = Buffer.from(configured || '')
+    const valid =
+      !!configured &&
+      suppliedBuffer.length === configuredBuffer.length &&
+      timingSafeEqual(suppliedBuffer, configuredBuffer)
+    if (!valid) {
       throw new UnauthorizedException('invalid admin secret')
     }
     return true

@@ -54,6 +54,7 @@ async function bootstrap() {
   }
   const KNOWN_FRONTEND_ORIGINS = [
     'https://chatpilot.trygetchurnshield.com',
+    'https://admin.trygetchurnshield.com',
     'https://trygetchurnshield.com',
     'https://www.trygetchurnshield.com',
     'https://chat-pilot.dev',

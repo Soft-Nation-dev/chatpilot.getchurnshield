@@ -31,6 +31,13 @@ model companies {
   vertical                    String?                      @db.VarChar(30)
   timezone                    String?                      @db.VarChar(60)
   locale                      String?                      @db.VarChar(10)
+  account_status              String                       @default("active") @db.VarChar(20)
+  subscription_plan           String                       @default("trial") @db.VarChar(30)
+  subscription_status         String                       @default("pending") @db.VarChar(20)
+  subscription_started_at     DateTime?                    @db.Timestamptz(6)
+  subscription_expires_at     DateTime?                    @db.Timestamptz(6)
+  suspended_at                DateTime?                    @db.Timestamptz(6)
+  suspension_reason           String?
   assistant_instructions      assistant_instructions?      @relation(fields: [assistant_id], references: [id])
   contacts                    contacts[]
   users                       users[]
@@ -42,6 +49,9 @@ model companies {
   content_posts               content_posts[]
   content_automation_settings content_automation_settings?
   notifications               notifications[]
+
+  @@index([account_status])
+  @@index([subscription_status, subscription_expires_at])
 }
 
 model notifications {
