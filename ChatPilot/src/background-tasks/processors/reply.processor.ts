@@ -41,7 +41,12 @@ export class ReplyProcessor extends WorkerHost {
     }
 
     const gate = await this.chatLifecycle.gate(contact.id, 'INBOUND_REPLY')
-    if (!gate.allowed) {
+    const resetRequested = contact.messages.some(
+      message =>
+        message.author_type === AUTHOR_TYPE.HUMAN &&
+        message.message.trim().toLowerCase() === '/reset',
+    )
+    if (!gate.allowed && !resetRequested) {
       await this.contactService.markMessagesProcessed(contact)
       if (contact.company_id) {
         await this.chatLifecycle.recordAutomation({
@@ -56,6 +61,12 @@ export class ReplyProcessor extends WorkerHost {
         })
       }
       return { blocked: true, reason: gate.reason }
+    }
+
+    if (!gate.allowed && resetRequested) {
+      this.logger.log(
+        `Allowing explicit reset recovery for blocked contact ${contact.id}`,
+      )
     }
 
     if (contact.company_id) {
