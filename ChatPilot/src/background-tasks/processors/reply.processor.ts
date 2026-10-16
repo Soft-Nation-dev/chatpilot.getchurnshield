@@ -129,7 +129,7 @@ export class ReplyProcessor extends WorkerHost {
             generatedReplies: replyMessages,
           }
         }
-        const safeReply = sanitizeCustomerOutput(openAIMessage)
+        let safeReply = sanitizeCustomerOutput(openAIMessage)
         if (!safeReply) {
           this.logger.error(
             `Unsafe or empty AI reply blocked for contact ${contact.id}`,
@@ -143,6 +143,22 @@ export class ReplyProcessor extends WorkerHost {
             generatedReplies: replyMessages,
           }
         }
+
+        // A calendar failure deliberately moves the conversation to human
+        // takeover during this same job. Send exactly one canonical handoff
+        // message before respecting the newly closed gate, otherwise the state
+        // transition itself suppresses the explanation the customer needs.
+        const latestContact = await this.contactService.getContactById(contact.id)
+        const terminalHandoff =
+          gate.allowed &&
+          (latestContact as any)?.conversation_state?.inspection?.status ===
+            'awaiting_human'
+        if (terminalHandoff && latestContact) {
+          safeReply = buildDegradedReply(
+            latestContact as Contact,
+            combinedMessages,
+          )
+        }
         const contentParts = this.WaFormattingService.splitMessage(safeReply)
 
         for (let i = 0; i < contentParts.length; i++) {
@@ -150,11 +166,16 @@ export class ReplyProcessor extends WorkerHost {
             contact.id,
             'INBOUND_REPLY',
           )
-          if (!sendGate.allowed) {
+          if (!sendGate.allowed && !terminalHandoff) {
             this.logger.warn(
               `Outbound reply blocked for contact ${contact.id}: ${sendGate.reason}`,
             )
             break
+          }
+          if (!sendGate.allowed && terminalHandoff) {
+            this.logger.log(
+              `Sending final calendar handoff notice for contact ${contact.id}`,
+            )
           }
           const part = contentParts[i]
           const image = this.WaFormattingService.getMarkdownImage(part)

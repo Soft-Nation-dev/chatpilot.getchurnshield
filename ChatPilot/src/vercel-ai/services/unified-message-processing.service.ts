@@ -29,6 +29,14 @@ export class UnifiedMessageProcessingService {
       return `Please make sure you are using the same phone number registered on your chatpilot account, or contact our support team for assistance.`
     }
 
+    // Reset is an explicit customer recovery command. It must be handled before
+    // lifecycle gating so a paused, handed-over, or closed test conversation can
+    // be deliberately restarted instead of remaining permanently silent.
+    if (text.toLowerCase().includes('/reset')) {
+      await this.contactService.archiveContact(contact.id)
+      return `Perfect! You have successfully restarted the conversation. Now you can start again and send your next question or message. I'm here to help!`
+    }
+
     const gate = await this.chatLifecycle.gate(contact.id, 'INBOUND_REPLY')
     if (!gate.allowed) {
       this.logger.warn(
@@ -37,10 +45,6 @@ export class UnifiedMessageProcessingService {
       return null
     }
 
-    if (text.toLowerCase().includes('/reset')) {
-      await this.contactService.archiveContact(contact.id)
-      return `Perfect! You have successfully restarted the conversation. Now you can start again and send your next question or message. I'm here to help!`
-    }
     this.logger.log(`text: ${text}`)
 
     const updatedContact = await this.contactService.updateContact(contact.id, {
