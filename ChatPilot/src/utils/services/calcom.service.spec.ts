@@ -60,4 +60,25 @@ describe('CalComService', () => {
       },
     })
   })
+
+  it('hands scheduling back safely when calendar credentials are absent', async () => {
+    const result = await service.getAvailableAppointments(
+      {
+        id: 6,
+        cal_api_key: null,
+        cal_booking_length: null,
+        cal_event_type_id: BigInt(0),
+        cal_event_slug: null,
+      } as any,
+      '2026-10-17',
+      '2026-10-17',
+    )
+
+    expect(mockedAxios.get).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      success: false,
+      slots: {},
+      error: 'Calendar booking is not configured for this company.',
+    })
+  })
 })

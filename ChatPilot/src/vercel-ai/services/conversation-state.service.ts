@@ -39,6 +39,10 @@ export type PreparedConversationTurn = {
 
 const SCHEDULING_TERMS =
   /\b(appointment|inspection|inspect|viewing|schedule|booking|book|slot|visit|come\s+(?:and\s+)?see)\b/i
+const DIRECT_SCHEDULING_REQUEST =
+  /\b(?:book|schedule|arrange|set\s*up|request|want|would\s+like|ready)\b[\s\S]{0,50}\b(?:appointment|inspection|viewing|visit|come\s+(?:and\s+)?see)\b|\b(?:appointment|inspection|viewing|visit)\b[\s\S]{0,35}\b(?:book|schedule|arrange|available|when|day|time)\b/i
+const FLOW_STATUS_QUERY =
+  /\b(?:already|agreed|confirm(?:ed|ation)?|status|pending|booked|saved)\b/i
 const ACKNOWLEDGEMENT =
   /^(?:yes|yeah|yep|ok(?:ay)?|alright|sure|thanks?|thank you|noted|perfect|great|that works)(?:[\s!.]|$)/i
 
@@ -55,25 +59,33 @@ export class ConversationStateService {
   async prepareTurn(
     contact: Contact,
     rawText: string,
-    recentMessages: AiChatMessage[],
+    _recentMessages: AiChatMessage[],
   ): Promise<PreparedConversationTurn> {
     const message = this.extractCustomerText(rawText)
-    const priorContext = recentMessages
-      .slice(-10)
-      .flatMap(item => item.content)
-      .map(item => item.text || '')
-      .join(' ')
     const previousState = this.read(contact)
-    const existing = previousState?.inspection
-    const schedulingContext =
-      SCHEDULING_TERMS.test(message) ||
-      SCHEDULING_TERMS.test(priorContext) ||
-      !!existing
+    const existing = this.isActive(previousState?.inspection)
+      ? previousState?.inspection
+      : undefined
+    const directSchedulingRequest = DIRECT_SCHEDULING_REQUEST.test(message)
 
-    if (!schedulingContext) {
+    if (previousState?.inspection && !existing) {
+      const clearedState: ConversationState = { version: 1 }
+      await this.write(contact.id, clearedState)
+      if (!directSchedulingRequest) {
+        return {
+          state: clearedState,
+          systemContext: '',
+          deterministicReply: null,
+        }
+      }
+    }
+
+    if (!existing && !directSchedulingRequest) {
       return {
-        state: previousState,
-        systemContext: this.buildSystemContext(previousState),
+        state: previousState?.inspection ? { version: 1 } : previousState,
+        systemContext: previousState?.inspection
+          ? ''
+          : this.buildSystemContext(previousState),
         deterministicReply: null,
       }
     }
@@ -97,6 +109,34 @@ export class ConversationStateService {
     const day = this.extractDay(message)
     const time = this.extractTime(message)
     const email = this.extractEmail(message)
+    const answersCurrentField =
+      (!!existing && existing.status === 'collecting_property' && !!matchedProperty) ||
+      (!!existing && existing.status === 'collecting_day' && !!day) ||
+      (!!existing && existing.status === 'collecting_time' && !!time) ||
+      (!!existing && existing.status === 'collecting_email' && !!email)
+    const asksAboutCurrentFlow =
+      !!existing &&
+      (existing.status === 'awaiting_human' || existing.status === 'booked') &&
+      (SCHEDULING_TERMS.test(message) || FLOW_STATUS_QUERY.test(message))
+
+    // A pending inspection is context, not permission to hijack every future
+    // customer message. Let the LLM answer side questions (for example, asking
+    // what other properties are available) without replaying the missing-field
+    // prompt. The deterministic flow resumes only when the customer advances it
+    // or explicitly returns to scheduling.
+    if (
+      existing &&
+      !directSchedulingRequest &&
+      !answersCurrentField &&
+      !asksAboutCurrentFlow &&
+      !(existing.status === 'booked' && ACKNOWLEDGEMENT.test(message))
+    ) {
+      return {
+        state: previousState,
+        systemContext: this.buildSystemContext(previousState),
+        deterministicReply: null,
+      }
+    }
 
     const inspection = {
       status: (existing?.status || 'collecting_property') as InspectionStatus,
@@ -224,7 +264,7 @@ export class ConversationStateService {
       .map(item => `- ${item}`)
       .join(
         '\n',
-      )}\nTreat these facts as already answered. Never ask for them again. Ask only for the next missing field. If status is awaiting_human, say the team is confirming and do not ask another question. If status is booked, confirm or close naturally and do not restart qualification or scheduling.\n`
+      )}\nTreat these facts as already answered. Never ask for them again. This pending flow is context, not a command to ignore the customer's latest message. Answer the latest question first. If it does not supply the next missing scheduling field, do not repeat that field's question in this turn. If the customer asks about other listings or availability, use search_inventory and answer that before returning to scheduling. Never send the same question on consecutive assistant turns. If status is awaiting_human, say the team is confirming only when the customer asks about that request; otherwise answer their new question. If status is booked, confirm or close naturally and do not restart qualification or scheduling.\n`
   }
 
   private nextStatus(
@@ -350,6 +390,23 @@ export class ConversationStateService {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, ' ')
       .trim()
+  }
+
+  private isActive(
+    inspection: ConversationState['inspection'],
+  ): inspection is NonNullable<ConversationState['inspection']> {
+    if (!inspection) return false
+    if (inspection.status === 'booked') return true
+    const updatedAt = Date.parse(inspection.updatedAt)
+    if (!Number.isFinite(updatedAt)) return false
+    const configuredHours = Number(
+      process.env.CONVERSATION_STATE_TTL_HOURS || 48,
+    )
+    const ttlHours =
+      Number.isFinite(configuredHours) && configuredHours > 0
+        ? configuredHours
+        : 48
+    return Date.now() - updatedAt <= ttlHours * 60 * 60 * 1000
   }
 
   private async readById(contactId: number): Promise<ConversationState | null> {

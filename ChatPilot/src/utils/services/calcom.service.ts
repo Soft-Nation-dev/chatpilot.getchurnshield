@@ -22,6 +22,20 @@ export class CalComService {
     startDate: string,
     endDate: string,
   ): Promise<CalendarAvailabilityResult> {
+    if (
+      !company.cal_api_key ||
+      (!company.cal_event_type_id && !company.cal_event_slug)
+    ) {
+      this.logger.warn(
+        `Calendar availability skipped for company ${company.id}: integration is not configured`,
+      )
+      return {
+        success: false,
+        slots: {},
+        error: 'Calendar booking is not configured for this company.',
+      }
+    }
+
     const url = `${this.baseUrl}/slots`
 
     const params: Record<string, string | number> = {
@@ -91,6 +105,16 @@ export class CalComService {
     provider: string
     data: any
   }> {
+    if (!company.cal_api_key || !company.cal_event_type_id) {
+      return {
+        success: false,
+        error: 'Calendar booking is not configured for this company.',
+        date: null,
+        provider: 'cal.com',
+        data: null,
+      }
+    }
+
     const url = `${this.baseUrl}/bookings`
 
     const headers = {
@@ -153,6 +177,15 @@ export class CalComService {
     provider: string
     data: any
   }> {
+    if (!company.cal_api_key || !contact.crm_appointment_id) {
+      return {
+        success: false,
+        error: 'Calendar booking is not configured for this company.',
+        provider: 'cal.com',
+        data: null,
+      }
+    }
+
     const url = `${this.baseUrl}/bookings/${contact.crm_appointment_id}/cancel`
 
     const headers = {

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing'
 import { WebhookController } from './webhook.controller'
 import { WebhookService } from './webhook.service'
+import { WebhookIngressService } from './webhook-ingress.service'
 
 describe('WebhookController', () => {
   let controller: WebhookController
@@ -8,7 +9,10 @@ describe('WebhookController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [WebhookController],
-      providers: [{ provide: WebhookService, useValue: {} }],
+      providers: [
+        { provide: WebhookService, useValue: {} },
+        { provide: WebhookIngressService, useValue: {} },
+      ],
     }).compile()
 
     controller = module.get<WebhookController>(WebhookController)
