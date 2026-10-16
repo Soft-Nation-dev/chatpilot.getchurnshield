@@ -19,13 +19,34 @@ export class ReplyService {
     originalMessageType?: string
     senderName?: string
   }) {
+    const debounceMs = Math.max(
+      5000,
+      Math.min(8000, Number(process.env.WHATSAPP_DEBOUNCE_MS || 6500)),
+    )
+    const stableJobId = `reply-${taskData.clientId}`
+    const existing = await this.replyQueue.getJob(stableJobId)
+    if (existing) {
+      const state = await existing.getState()
+      if (state === 'delayed') {
+        await existing.updateData(taskData)
+        await existing.changeDelay(debounceMs)
+        this.logger.debug(`Debounced reply task for ${taskData.clientId}`)
+        return existing
+      }
+    }
+
+    const jobId = existing
+      ? `${stableJobId}-${Date.now()}`
+      : stableJobId
     const task = await this.replyQueue.add(BackgroundQueue.REPLIES, taskData, {
-      // attempts: 0, // Retry the task up to 3 times
-      // backoff: 20000, // 20 seconds between retries,
-      delay: 16000, // 16 seconds delay
-      // delay: 5000,
+      jobId,
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 2000 },
+      delay: debounceMs,
+      removeOnComplete: true,
+      removeOnFail: 200,
     })
-    this.logger.log('Task added to the queue')
+    this.logger.log(`Reply task ${task.id} queued with ${debounceMs}ms debounce`)
     return task
   }
 

@@ -568,6 +568,14 @@ export class ContactService {
     crm_appointment_at = NULL,
     crm_appointment_id = NULL,
     contact_stop_date = NULL
+    ,chat_state = 'NEW'
+    ,chat_state_version = chat_state_version + 1
+    ,state_changed_at = NOW()
+    ,state_change_reason = 'Conversation reset'
+    ,follow_up_count = 0
+    ,follow_up_due_at = NULL
+    ,last_customer_message_at = NULL
+    ,last_automated_message_at = NULL
   WHERE id = ${contactId};
 `
   }
@@ -575,8 +583,11 @@ export class ContactService {
   async resetFollowUps(contactId: number) {
     const updatedContact = await this.updateContact(contactId, {
       last_message_received: new Date(),
+      last_customer_message_at: new Date(),
       is_follow_up_sent: false,
       follow_up_stage: 0,
+      follow_up_count: 0,
+      follow_up_due_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
       contact_stop_date: null,
     })
     return updatedContact

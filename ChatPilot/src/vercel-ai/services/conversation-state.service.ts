@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import { DateTime } from 'luxon'
 import { PrismaService } from 'src/prisma/prisma.service'
 import { AiChatMessage, Contact } from 'src/utils/constants/types'
+import { ChatLifecycleService } from 'src/contact/chat-lifecycle.service'
 
 export type InspectionStatus =
   | 'collecting_property'
@@ -46,7 +47,10 @@ export class ConversationStateService {
   private readonly logger = new Logger(ConversationStateService.name)
   private readonly timezone = process.env.DEFAULT_TIMEZONE || 'Africa/Lagos'
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly chatLifecycle: ChatLifecycleService,
+  ) {}
 
   async prepareTurn(
     contact: Contact,
@@ -169,6 +173,10 @@ export class ConversationStateService {
       where: { id: contact.id },
       data: { conversation_state: state as any, needs_review: true },
     })
+    await this.chatLifecycle.transition(contact.id, 'HUMAN_TAKEOVER', {
+      reason: `Calendar handoff: ${reason}`,
+      actor: 'automation',
+    })
     if (!alreadyEscalated) {
       await this.sendCalendarAlert(contact, reason)
     }
@@ -181,6 +189,10 @@ export class ConversationStateService {
     state.inspection.selectedDateTime = selectedDateTime
     state.inspection.updatedAt = new Date().toISOString()
     await this.write(contactId, state)
+    await this.chatLifecycle.transition(contactId, 'INSPECTION_BOOKED', {
+      reason: 'Inspection booking confirmed',
+      actor: 'automation',
+    })
   }
 
   async clearInspection(contactId: number) {
@@ -188,6 +200,10 @@ export class ConversationStateService {
     if (!state) return
     delete state.inspection
     await this.write(contactId, state)
+    await this.chatLifecycle.transition(contactId, 'QUALIFYING', {
+      reason: 'Inspection flow cleared or cancelled',
+      actor: 'automation',
+    })
   }
 
   buildSystemContext(state: ConversationState | null): string {

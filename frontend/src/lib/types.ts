@@ -57,6 +57,48 @@ export interface Lead {
   contact_id: number | null
   last_contact_at: string | null
   created_at: string
+  contact_operation?: ContactOperation | null
+}
+
+export type ChatState =
+  | 'NEW'
+  | 'QUALIFYING'
+  | 'QUALIFIED'
+  | 'INSPECTION_PENDING'
+  | 'INSPECTION_BOOKED'
+  | 'HUMAN_TAKEOVER'
+  | 'CONCLUDED_CLOSED'
+  | 'COLD_LEAD'
+
+export interface AutomationEvent {
+  id: number
+  job_type: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'blocked' | 'retrying'
+  attempt: number
+  max_attempts: number
+  error_message: string | null
+  details: Record<string, unknown> | null
+  started_at: string
+  completed_at: string | null
+}
+
+export interface ChatStateTransition {
+  id: number
+  from_state: ChatState
+  to_state: ChatState
+  reason: string | null
+  actor: string
+  created_at: string
+}
+
+export interface ContactOperation {
+  chat_state: ChatState
+  state_changed_at: string
+  state_change_reason: string | null
+  follow_up_count: number
+  follow_up_due_at: string | null
+  needs_review: boolean
+  automation_events: AutomationEvent[]
 }
 
 export interface LeadUsage {
@@ -91,6 +133,13 @@ export interface Contact {
   crm_appointment_id: string | null
   crm_appointment_at: string | null
   last_message_received: string
+  chat_state: ChatState
+  state_changed_at: string
+  state_change_reason: string | null
+  follow_up_count: number
+  follow_up_due_at: string | null
+  last_automated_message_at: string | null
+  automation_events?: AutomationEvent[]
   messages?: Message[]
 }
 

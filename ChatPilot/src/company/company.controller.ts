@@ -36,6 +36,11 @@ import { SendMessageDto } from './dto/send-message.dto'
 import { WhatsAppFormatter } from 'src/utils/services/whatsapp-formatter.helper'
 import { ConfigsService } from 'src/config/config.service'
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard'
+import {
+  CHAT_STATES,
+  ChatLifecycleService,
+} from 'src/contact/chat-lifecycle.service'
+import { ReplyService } from 'src/background-tasks/services/reply.service'
 
 @ApiTags('Companies')
 @Controller('companies')
@@ -47,6 +52,8 @@ export class CompanyController {
     private readonly ConfigService: ConfigsService,
     private readonly companyAccess: CompanyAccessService,
     private readonly contactRedaction: ContactRedactionService,
+    private readonly chatLifecycle: ChatLifecycleService,
+    private readonly replyService: ReplyService,
   ) {}
 
   private async verifyOwnership(userId: number, companyId: number) {
@@ -424,6 +431,101 @@ export class CompanyController {
       is_bot_activated: body.is_bot_activated,
       ...(body.is_bot_activated ? { is_replies_activated: true } : {}),
     })
+  }
+
+  @ApiOperation({ summary: 'Get compact automation history for a contact' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/contacts/:contactId/operations')
+  async getContactOperations(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('contactId', ParseIntPipe) contactId: number,
+  ) {
+    await this.verifyOwnership(req.user.userId, id)
+    const contact = await this.contactService.getContactById(contactId)
+    if (!contact || contact.company_id !== id) {
+      throw new UnprocessableEntityException('Contact not found')
+    }
+    return this.chatLifecycle.operationalTimeline(id, contactId)
+  }
+
+  @ApiOperation({ summary: 'Control automation lifecycle for a contact' })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Put(':id/contacts/:contactId/automation')
+  async controlContactAutomation(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('contactId', ParseIntPipe) contactId: number,
+    @Body()
+    body: {
+      action: 'pause' | 'resume' | 'handoff' | 'close' | 'reopen' | 'retry'
+      reason?: string
+    },
+  ) {
+    await this.verifyOwnership(req.user.userId, id)
+    const contact = await this.contactService.getContactById(contactId)
+    if (!contact || contact.company_id !== id) {
+      throw new UnprocessableEntityException('Contact not found')
+    }
+    const reason = body.reason || `Dashboard action: ${body.action}`
+
+    if (body.action === 'pause') {
+      return this.contactService.updateContact(contactId, {
+        is_bot_activated: false,
+        state_change_reason: reason,
+      })
+    }
+    if (body.action === 'resume' || body.action === 'reopen') {
+      await this.contactService.updateContact(contactId, {
+        is_bot_activated: true,
+        is_replies_activated: true,
+        needs_review: false,
+      })
+      return this.chatLifecycle.transition(contactId, 'QUALIFYING', {
+        reason,
+        actor: 'dashboard_user',
+      })
+    }
+    if (body.action === 'handoff') {
+      return this.chatLifecycle.transition(contactId, 'HUMAN_TAKEOVER', {
+        reason,
+        actor: 'dashboard_user',
+      })
+    }
+    if (body.action === 'close') {
+      return this.chatLifecycle.transition(contactId, 'CONCLUDED_CLOSED', {
+        reason,
+        actor: 'dashboard_user',
+      })
+    }
+    if (body.action === 'retry') {
+      const gate = await this.chatLifecycle.gate(contactId, 'INBOUND_REPLY')
+      if (!gate.allowed) {
+        throw new UnprocessableEntityException(
+          `Retry blocked because the conversation is ${gate.state.toLowerCase()}`,
+        )
+      }
+      const task = await this.replyService.addReplyTask({
+        clientId: contactId,
+        companyId: id,
+      })
+      await this.chatLifecycle.recordAutomation({
+        companyId: id,
+        contactId,
+        jobType: 'reply',
+        status: 'queued',
+        jobId: String(task.id),
+        maxAttempts: task.opts.attempts || 1,
+        details: { source: 'dashboard_retry' },
+      })
+      return { queued: true, jobId: task.id }
+    }
+
+    throw new UnprocessableEntityException(
+      `Action must be one of pause, resume, handoff, close, reopen, retry. States: ${CHAT_STATES.join(', ')}`,
+    )
   }
 
   // ─── Company Assets (File Upload) ──────────────────────────────

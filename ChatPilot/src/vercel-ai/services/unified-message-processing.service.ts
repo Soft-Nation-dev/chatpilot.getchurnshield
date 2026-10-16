@@ -3,6 +3,7 @@ import { ContactService } from 'src/contact/contact.service'
 import { Contact } from 'src/utils/constants/types'
 import { AiGoogleService } from 'src/vercel-ai/services/ai-google.service'
 import { ConversationStateService } from './conversation-state.service'
+import { ChatLifecycleService } from 'src/contact/chat-lifecycle.service'
 
 const MAX_MESSAGES = 50
 
@@ -14,6 +15,7 @@ export class UnifiedMessageProcessingService {
     private readonly AiGeminiService: AiGoogleService,
     private readonly contactService: ContactService,
     private readonly conversationStateService: ConversationStateService,
+    private readonly chatLifecycle: ChatLifecycleService,
   ) {}
 
   async processClientMessage(
@@ -25,6 +27,14 @@ export class UnifiedMessageProcessingService {
     this.logger.log(`contact: ${contact}`)
     if (isUnauthorized) {
       return `Please make sure you are using the same phone number registered on your chatpilot account, or contact our support team for assistance.`
+    }
+
+    const gate = await this.chatLifecycle.gate(contact.id, 'INBOUND_REPLY')
+    if (!gate.allowed) {
+      this.logger.warn(
+        `LLM call blocked for contact ${contact.id}: ${gate.reason}`,
+      )
+      return null
     }
 
     if (text.toLowerCase().includes('/reset')) {

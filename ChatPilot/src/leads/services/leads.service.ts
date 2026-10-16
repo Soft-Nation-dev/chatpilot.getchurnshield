@@ -11,6 +11,7 @@ import { LEADS_OUTREACH_QUEUE, LeadJobKind } from '../leads.constants'
 import { AUTHOR_TYPE, Company, Contact } from '../../utils/constants/types'
 import { leads } from '@prisma/client'
 import { withCompanyLock, withSourcingLock } from '../pool.mutex'
+import { ChatLifecycleService } from '../../contact/chat-lifecycle.service'
 
 @Injectable()
 export class LeadsService {
@@ -23,6 +24,7 @@ export class LeadsService {
     private readonly aiGoogleService: AiGoogleService,
     private readonly sourcingService: LeadSourcingService,
     @InjectQueue(LEADS_OUTREACH_QUEUE) private readonly outreachQueue: Queue,
+    private readonly chatLifecycle: ChatLifecycleService,
   ) {}
 
   private monthStart(): Date {
@@ -60,8 +62,8 @@ export class LeadsService {
   async list(
     companyId: number,
     filters: { status?: string; bot?: string } = {},
-  ): Promise<leads[]> {
-    return this.prisma.leads.findMany({
+  ): Promise<any[]> {
+    const rows = await this.prisma.leads.findMany({
       where: {
         company_id: companyId,
         ...(filters.status ? { status: filters.status } : {}),
@@ -70,6 +72,34 @@ export class LeadsService {
       },
       orderBy: { created_at: 'desc' },
     })
+    const contactIds = rows
+      .map(row => row.contact_id)
+      .filter((id): id is number => Boolean(id))
+    const contacts = contactIds.length
+      ? await this.prisma.contacts.findMany({
+          where: { id: { in: contactIds }, company_id: companyId },
+          select: {
+            id: true,
+            chat_state: true,
+            state_changed_at: true,
+            state_change_reason: true,
+            follow_up_count: true,
+            follow_up_due_at: true,
+            needs_review: true,
+            automation_events: {
+              orderBy: { started_at: 'desc' },
+              take: 1,
+            },
+          },
+        })
+      : []
+    const byContact = new Map(contacts.map(contact => [contact.id, contact]))
+    return rows.map(row => ({
+      ...row,
+      contact_operation: row.contact_id
+        ? byContact.get(row.contact_id) || null
+        : null,
+    }))
   }
 
   async detail(companyId: number, leadId: number) {
@@ -80,7 +110,24 @@ export class LeadsService {
     const messages = lead.contact_id
       ? await this.contactService.getAllMessages(lead.contact_id)
       : []
-    return { lead, messages }
+    const contactOperation = lead.contact_id
+      ? await this.prisma.contacts.findFirst({
+          where: { id: lead.contact_id, company_id: companyId },
+          select: {
+            chat_state: true,
+            state_changed_at: true,
+            state_change_reason: true,
+            follow_up_count: true,
+            follow_up_due_at: true,
+            needs_review: true,
+            automation_events: {
+              orderBy: { started_at: 'desc' },
+              take: 5,
+            },
+          },
+        })
+      : null
+    return { lead: { ...lead, contact_operation: contactOperation }, messages }
   }
 
   async requestLeads(companyId: number, count: number) {
@@ -203,16 +250,20 @@ export class LeadsService {
   }
 
   async enqueueManual(companyId: number, leadId: number, text: string) {
-    await this.outreachQueue.add(LeadJobKind.MANUAL, {
-      companyId,
-      leadId,
-      text,
-    })
+    await this.outreachQueue.add(
+      LeadJobKind.MANUAL,
+      { companyId, leadId, text },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+    )
     return { queued: true }
   }
 
   async enqueueAiOpen(companyId: number, leadId: number) {
-    await this.outreachQueue.add(LeadJobKind.AI_OPEN, { companyId, leadId })
+    await this.outreachQueue.add(
+      LeadJobKind.AI_OPEN,
+      { companyId, leadId },
+      { attempts: 3, backoff: { type: 'exponential', delay: 2000 } },
+    )
     return { queued: true }
   }
 
@@ -253,7 +304,7 @@ export class LeadsService {
         companyId,
         leadId: lead.id,
         text: this.personalize(body, lead),
-      })
+      }, { attempts: 3, backoff: { type: 'exponential', delay: 2000 } })
     }
     return { started: true, total: leadsList.length }
   }
@@ -268,7 +319,7 @@ export class LeadsService {
       await this.outreachQueue.add(LeadJobKind.AI_OPEN, {
         companyId,
         leadId: lead.id,
-      })
+      }, { attempts: 3, backoff: { type: 'exponential', delay: 2000 } })
     }
     return { started: true, total: leadsList.length }
   }
@@ -332,6 +383,7 @@ export class LeadsService {
     })
     if (!lead) throw new NotFoundException('lead not found')
     const contact = await this.resolveContact(company, lead)
+
     await this.contactService.sendMessage(
       contact,
       text,
@@ -344,7 +396,37 @@ export class LeadsService {
     })
   }
 
-  async processAiOpen(companyId: number, leadId: number): Promise<void> {
+  async recordOutreachOutcome(
+    companyId: number,
+    leadId: number,
+    input: {
+      jobType: string
+      status: 'succeeded' | 'failed' | 'retrying'
+      attempt: number
+      maxAttempts: number
+      jobId: string
+      error?: unknown
+    },
+  ) {
+    const lead = await this.prisma.leads.findFirst({
+      where: { id: leadId, company_id: companyId },
+      select: { contact_id: true },
+    })
+    if (!lead?.contact_id) return
+    await this.chatLifecycle.recordAutomation({
+      companyId,
+      contactId: lead.contact_id,
+      jobType: input.jobType,
+      status: input.status,
+      attempt: input.attempt,
+      maxAttempts: input.maxAttempts,
+      jobId: input.jobId,
+      error: input.error,
+      details: { leadId },
+    })
+  }
+
+  async processAiOpen(companyId: number, leadId: number): Promise<boolean> {
     const company = await this.companyService.findById(companyId)
     if (!company) throw new NotFoundException('company not found')
     const lead = await this.prisma.leads.findFirst({
@@ -352,6 +434,22 @@ export class LeadsService {
     })
     if (!lead) throw new NotFoundException('lead not found')
     const contact = await this.resolveContact(company, lead)
+
+    const gate = await this.chatLifecycle.gate(contact.id, 'OUTBOUND_AUTOMATION')
+    if (!gate.allowed) {
+      await this.chatLifecycle.recordAutomation({
+        companyId,
+        contactId: contact.id,
+        jobType: 'lead_ai_outreach',
+        status: 'blocked',
+        details: { reason: gate.reason, state: gate.state },
+      })
+      return false
+    }
+    await this.chatLifecycle.transition(contact.id, 'QUALIFYING', {
+      reason: 'AI outreach started for sourced lead',
+      actor: 'lead_outreach',
+    })
 
     const systemPrompt = await this.buildSystemPrompt(company)
     const context = [
@@ -391,6 +489,7 @@ export class LeadsService {
       where: { id: lead.id },
       data: { status: 'contacted', last_contact_at: new Date() },
     })
+    return true
   }
 
   private async buildSystemPrompt(company: Company): Promise<string> {

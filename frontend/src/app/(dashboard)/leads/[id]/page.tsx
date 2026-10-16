@@ -11,6 +11,13 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { AlertTriangle, CheckCircle2, Clock3, RefreshCw } from 'lucide-react'
+
+const CHAT_STATE_LABELS: Record<string, string> = {
+  NEW: 'New', QUALIFYING: 'Qualifying', QUALIFIED: 'Qualified',
+  INSPECTION_PENDING: 'Inspection pending', INSPECTION_BOOKED: 'Inspection booked',
+  HUMAN_TAKEOVER: 'Human takeover', CONCLUDED_CLOSED: 'Closed', COLD_LEAD: 'Cold lead',
+}
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -114,6 +121,29 @@ export default function LeadViewPage() {
           <Row label="Source" value={lead?.source} />
           <Row label="Score" value={lead ? lead.qual_score.toFixed(2) : undefined} />
           <Row label="Notes" value={lead?.notes} />
+          <div className="mt-5 border-t border-slate-100 pt-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-foreground">Automation health</h3>
+              {lead?.contact_operation?.needs_review && <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">Needs attention</Badge>}
+            </div>
+            <div className="mt-3 rounded-xl bg-slate-50 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-slate-400">Conversation state</p>
+              <p className="mt-1 text-sm font-semibold text-slate-800">{CHAT_STATE_LABELS[lead?.contact_operation?.chat_state || ''] || 'Not started'}</p>
+              {lead?.contact_operation?.state_change_reason && <p className="mt-1 text-xs text-slate-500">{lead.contact_operation.state_change_reason}</p>}
+            </div>
+            <div className="mt-3 space-y-2">
+              {(lead?.contact_operation?.automation_events || []).slice(0, 4).map(event => {
+                const Icon = event.status === 'succeeded' ? CheckCircle2 : event.status === 'failed' ? AlertTriangle : event.status === 'retrying' ? RefreshCw : Clock3
+                const tone = event.status === 'succeeded' ? 'text-emerald-700' : event.status === 'failed' ? 'text-red-700' : event.status === 'retrying' ? 'text-blue-700' : 'text-amber-700'
+                return <div key={event.id} className="flex items-start gap-2 rounded-lg border border-slate-100 px-2.5 py-2 text-xs">
+                  <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${tone}`} />
+                  <div className="min-w-0"><p className="font-medium capitalize text-slate-700">{event.job_type.replaceAll('_', ' ')} · {event.status}</p><p className="text-slate-400">Attempt {event.attempt}/{event.max_attempts}</p>{event.error_message && <p className="mt-1 line-clamp-2 text-red-600">The AI or delivery provider did not complete this run. Retry it from Chats, or take over if it is urgent.</p>}</div>
+                </div>
+              })}
+              {lead?.contact_id && !lead.contact_operation?.automation_events?.length && <p className="text-xs text-slate-400">No automation run has been recorded yet.</p>}
+              {!lead?.contact_id && <p className="text-xs text-slate-400">Automation history starts after first contact.</p>}
+            </div>
+          </div>
         </div>
 
         <div className="rounded-2xl border border-slate-200/60 bg-white p-5 lg:col-span-2 flex flex-col">

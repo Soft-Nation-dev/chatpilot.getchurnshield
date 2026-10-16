@@ -4,9 +4,24 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useAuth } from '@/context/auth-context'
 import api from '@/lib/api'
-import { Contact, Message, PaginatedResponse } from '@/lib/types'
+import { AutomationEvent, ChatStateTransition, Contact, Message, PaginatedResponse } from '@/lib/types'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { ChevronDown, ChevronUp, CircleX, Clock3, Hand, Pause, Play, RefreshCw } from 'lucide-react'
+
+const STATE_LABELS: Record<string, string> = {
+  NEW: 'New', QUALIFYING: 'Qualifying', QUALIFIED: 'Qualified',
+  INSPECTION_PENDING: 'Inspection pending', INSPECTION_BOOKED: 'Inspection booked',
+  HUMAN_TAKEOVER: 'Human takeover', CONCLUDED_CLOSED: 'Closed', COLD_LEAD: 'Cold lead',
+}
+
+const eventTone = (status?: string) => {
+  if (status === 'succeeded') return 'text-emerald-700 bg-emerald-50 border-emerald-200'
+  if (status === 'failed') return 'text-red-700 bg-red-50 border-red-200'
+  if (status === 'blocked') return 'text-amber-700 bg-amber-50 border-amber-200'
+  return 'text-blue-700 bg-blue-50 border-blue-200'
+}
 
 export default function ChatsPage() {
   const { user } = useAuth()
@@ -17,6 +32,11 @@ export default function ChatsPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [showMobileChat, setShowMobileChat] = useState(false)
+  const [events, setEvents] = useState<AutomationEvent[]>([])
+  const [transitions, setTransitions] = useState<ChatStateTransition[]>([])
+  const [showOperations, setShowOperations] = useState(false)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [actionError, setActionError] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const fetchContacts = useCallback(async () => {
@@ -35,8 +55,13 @@ export default function ChatsPage() {
     if (!companyId) return
     setLoadingMessages(true)
     try {
-      const res = await api.get(`/companies/${companyId}/contacts/${contactId}/messages`)
-      setMessages(res.data.messages)
+      const [messageRes, operationsRes] = await Promise.all([
+        api.get(`/companies/${companyId}/contacts/${contactId}/messages`),
+        api.get(`/companies/${companyId}/contacts/${contactId}/operations`),
+      ])
+      setMessages(messageRes.data.messages)
+      setEvents(operationsRes.data.events || [])
+      setTransitions(operationsRes.data.transitions || [])
     } catch { /* silent */ }
     finally { setLoadingMessages(false) }
   }, [companyId])
@@ -44,7 +69,26 @@ export default function ChatsPage() {
   const selectContact = (contact: Contact) => {
     setSelectedContact(contact)
     setShowMobileChat(true)
+    setShowOperations(false)
+    setActionError('')
     fetchMessages(contact.id)
+  }
+
+  const runAction = async (action: 'pause' | 'resume' | 'handoff' | 'close' | 'reopen' | 'retry') => {
+    if (!companyId || !selectedContact) return
+    setActionLoading(action)
+    setActionError('')
+    try {
+      const response = await api.put(`/companies/${companyId}/contacts/${selectedContact.id}/automation`, { action })
+      if (action !== 'retry' && response.data) {
+        setSelectedContact(current => current ? { ...current, ...response.data } : current)
+      }
+      await Promise.all([fetchContacts(), fetchMessages(selectedContact.id)])
+    } catch (cause: any) {
+      setActionError(cause?.response?.data?.message || 'The action could not be completed.')
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   useEffect(() => {
@@ -76,6 +120,13 @@ export default function ChatsPage() {
   }
   const formatTime = (d: string) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   const formatDate = (d: string) => new Date(d).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
+  const dueLabel = (date: string) => {
+    const minutes = Math.ceil((new Date(date).getTime() - Date.now()) / 60000)
+    if (minutes <= 0) return 'Due now'
+    if (minutes < 60) return `Due in ${minutes}m`
+    if (minutes < 1440) return `Due in ${Math.ceil(minutes / 60)}h`
+    return `Due in ${Math.ceil(minutes / 1440)}d`
+  }
 
   const grouped: { date: string; msgs: Message[] }[] = []
   messages.forEach(msg => {
@@ -133,9 +184,9 @@ export default function ChatsPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <p className="text-xs text-muted-foreground truncate pr-2">{lastMsg(contact)}</p>
-                      {contact.is_bot_activated && (
-                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
-                      )}
+                      <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-600">
+                        {STATE_LABELS[contact.chat_state] || 'New'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -181,12 +232,58 @@ export default function ChatsPage() {
                 <h3 className="font-semibold text-foreground text-sm">{displayName(selectedContact)}</h3>
                 <p className="text-xs text-muted-foreground">{selectedContact.phone ? `+${selectedContact.phone}` : ''}</p>
               </div>
-              <Badge
-                variant={selectedContact.is_bot_activated ? 'default' : 'secondary'}
-                className={`text-[10px] ${selectedContact.is_bot_activated ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : ''}`}
-              >
+              <Badge variant="outline" className="hidden sm:inline-flex text-[10px]">
+                {STATE_LABELS[selectedContact.chat_state] || 'New'}
+              </Badge>
+              <Badge variant={selectedContact.is_bot_activated ? 'default' : 'secondary'} className={`text-[10px] ${selectedContact.is_bot_activated ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : ''}`}>
                 AI {selectedContact.is_bot_activated ? 'On' : 'Off'}
               </Badge>
+            </div>
+
+            <div className="border-b border-slate-100 bg-white px-3 py-2.5 sm:px-5">
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                <Button size="sm" variant="outline" className="h-8 shrink-0 text-xs" disabled={!!actionLoading} onClick={() => runAction(selectedContact.is_bot_activated ? 'pause' : 'resume')}>
+                  {selectedContact.is_bot_activated ? <Pause className="mr-1.5 h-3.5 w-3.5" /> : <Play className="mr-1.5 h-3.5 w-3.5" />}
+                  {selectedContact.is_bot_activated ? 'Pause AI' : 'Resume AI'}
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 shrink-0 text-xs" disabled={!!actionLoading} onClick={() => runAction('handoff')}><Hand className="mr-1.5 h-3.5 w-3.5" />Take over</Button>
+                {selectedContact.chat_state === 'CONCLUDED_CLOSED' ? (
+                  <Button size="sm" variant="outline" className="h-8 shrink-0 text-xs" disabled={!!actionLoading} onClick={() => runAction('reopen')}><Play className="mr-1.5 h-3.5 w-3.5" />Reopen</Button>
+                ) : (
+                  <Button size="sm" variant="outline" className="h-8 shrink-0 text-xs" disabled={!!actionLoading} onClick={() => runAction('close')}><CircleX className="mr-1.5 h-3.5 w-3.5" />Close</Button>
+                )}
+                <Button size="sm" variant="outline" className="h-8 shrink-0 text-xs" disabled={!!actionLoading || selectedContact.chat_state === 'CONCLUDED_CLOSED'} onClick={() => runAction('retry')}><RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${actionLoading === 'retry' ? 'animate-spin' : ''}`} />Retry last reply</Button>
+              </div>
+              {actionError && <p className="mt-2 text-xs text-red-600">{actionError}</p>}
+              <div className="mt-2 grid grid-cols-[1fr_1fr_auto] items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+                <div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-slate-400">Last run</p><p className="truncate text-xs font-medium text-slate-700">{events[0] ? `${events[0].job_type.replaceAll('_', ' ')} · ${events[0].status}` : 'No automation run yet'}</p></div>
+                <div className="min-w-0"><p className="text-[10px] uppercase tracking-wide text-slate-400">Follow-up</p><p className="truncate text-xs font-medium text-slate-700">{selectedContact.follow_up_count ? 'Sent · no more scheduled' : selectedContact.follow_up_due_at ? dueLabel(selectedContact.follow_up_due_at) : 'Not scheduled'}</p></div>
+                <button onClick={() => setShowOperations(value => !value)} className="flex items-center gap-1 text-xs font-medium text-emerald-700">Details {showOperations ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}</button>
+              </div>
+              {showOperations && (
+                <div className="mt-2 grid gap-2 lg:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="mb-2 text-xs font-semibold text-slate-700">Recent automation</p>
+                    <div className="space-y-2">
+                      {events.slice(0, 5).map(event => (
+                        <div key={event.id} className={`rounded-lg border px-2.5 py-2 text-xs ${eventTone(event.status)}`}>
+                          <div className="flex items-center justify-between gap-2"><span className="font-medium capitalize">{event.job_type.replaceAll('_', ' ')}</span><span className="capitalize">{event.status}</span></div>
+                          <p className="mt-0.5 opacity-75">Attempt {event.attempt}/{event.max_attempts} · {timeAgo(event.started_at)} ago</p>
+                          {event.error_message && <p className="mt-1 line-clamp-2">The AI or delivery provider did not complete this run. Retry it, or take over if the conversation is urgent.</p>}
+                        </div>
+                      ))}
+                      {!events.length && <p className="text-xs text-slate-400">Runs will appear here after the next message.</p>}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="mb-2 text-xs font-semibold text-slate-700">Conversation state</p>
+                    <div className="space-y-2">
+                      {transitions.slice(0, 5).map(item => <div key={item.id} className="flex gap-2 text-xs"><Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" /><div><p className="font-medium text-slate-700">{STATE_LABELS[item.to_state] || item.to_state}</p><p className="text-slate-400">{item.reason || 'State updated'} · {timeAgo(item.created_at)} ago</p></div></div>)}
+                      {!transitions.length && <p className="text-xs text-slate-400">No state changes recorded yet.</p>}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex-1 overflow-auto bg-[#f0f2f5] px-4 sm:px-6 py-4">

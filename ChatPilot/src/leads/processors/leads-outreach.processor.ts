@@ -22,9 +22,25 @@ export class LeadsOutreachProcessor extends WorkerHost {
       if (job.name === LeadJobKind.MANUAL) {
         await this.leadsService.processManual(companyId, leadId, text ?? '')
       } else if (job.name === LeadJobKind.AI_OPEN) {
-        await this.leadsService.processAiOpen(companyId, leadId)
+        const sent = await this.leadsService.processAiOpen(companyId, leadId)
+        if (!sent) return
       }
+      await this.leadsService.recordOutreachOutcome(companyId, leadId, {
+        jobType: job.name === LeadJobKind.AI_OPEN ? 'lead_ai_outreach' : 'lead_manual_outreach',
+        status: 'succeeded',
+        attempt: job.attemptsMade + 1,
+        maxAttempts: job.opts.attempts || 1,
+        jobId: String(job.id),
+      })
     } catch (err) {
+      await this.leadsService.recordOutreachOutcome(companyId, leadId, {
+        jobType: job.name === LeadJobKind.AI_OPEN ? 'lead_ai_outreach' : 'lead_manual_outreach',
+        status: job.attemptsMade + 1 < (job.opts.attempts || 1) ? 'retrying' : 'failed',
+        attempt: job.attemptsMade + 1,
+        maxAttempts: job.opts.attempts || 1,
+        jobId: String(job.id),
+        error: err,
+      })
       this.logger.error(
         `Lead outreach job failed (${job.name}): ${err instanceof Error ? err.message : String(err)}`,
       )

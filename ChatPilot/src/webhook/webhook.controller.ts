@@ -1,12 +1,16 @@
-import { Controller, Post, Body } from '@nestjs/common'
+import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common'
 import { WebhookService } from './webhook.service'
 import { ApiBody, ApiOperation } from '@nestjs/swagger'
 import { WhatsBaileyDto } from './dto/whats-bailey.dto'
 import { WbConnectionUpdateDto } from './dto/wb-connection-update.dto'
+import { WebhookIngressService } from './webhook-ingress.service'
 
 @Controller('webhook')
 export class WebhookController {
-  constructor(private readonly webhookService: WebhookService) {}
+  constructor(
+    private readonly webhookService: WebhookService,
+    private readonly webhookIngress: WebhookIngressService,
+  ) {}
 
   @ApiOperation({ summary: 'Webhook whats-bailey' })
   @ApiBody({
@@ -14,8 +18,9 @@ export class WebhookController {
     description: 'The webhook data in JSON format',
   })
   @Post('whats-bailey')
+  @HttpCode(HttpStatus.ACCEPTED)
   whatsBaileyWebhook(@Body() createWebhookDto: WhatsBaileyDto) {
-    return this.webhookService.whatsBaileyWebhook(createWebhookDto)
+    return this.webhookIngress.accept(createWebhookDto)
   }
 
   @ApiOperation({ summary: 'Webhook whats-bailey connection status update' })

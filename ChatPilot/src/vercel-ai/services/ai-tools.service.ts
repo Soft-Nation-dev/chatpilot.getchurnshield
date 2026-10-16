@@ -11,6 +11,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service'
 import { CalComService } from 'src/utils/services/calcom.service'
 import { ConversationStateService } from './conversation-state.service'
+import { ChatLifecycleService } from 'src/contact/chat-lifecycle.service'
 
 @Injectable()
 export class AiToolsService {
@@ -23,6 +24,7 @@ export class AiToolsService {
     private readonly prisma: PrismaService,
     private readonly calComService: CalComService,
     private readonly conversationStateService: ConversationStateService,
+    private readonly chatLifecycle: ChatLifecycleService,
   ) {}
 
   getContactTools(contact: Contact, excludeTools: AiSdkToolsNames[] = []) {
@@ -114,6 +116,12 @@ export class AiToolsService {
               }),
               this.contactService.sendMessageToCompany(contact, message),
             ])
+            if (value) {
+              await this.chatLifecycle.transition(contact.id, 'HUMAN_TAKEOVER', {
+                reason: reason || 'AI requested human review',
+                actor: 'ai_tool',
+              })
+            }
 
             this.logger.log('tool call finished', {
               context: 'set_needs_review',
@@ -776,6 +784,18 @@ export class AiToolsService {
                     }),
               },
             )
+            const state =
+              stage === 'booked'
+                ? 'INSPECTION_BOOKED'
+                : stage === 'lost'
+                  ? 'CONCLUDED_CLOSED'
+                  : stage === 'qualified'
+                    ? 'QUALIFIED'
+                    : 'QUALIFYING'
+            await this.chatLifecycle.transition(contact.id, state, {
+              reason: `Lead stage updated to ${stage}`,
+              actor: 'ai_tool',
+            })
             this.logger.log('tool call finished', {
               context: 'set_lead_stage',
               result,
@@ -790,6 +810,88 @@ export class AiToolsService {
           }
         },
       }),
+
+      search_inventory: tool({
+        description:
+          'Searches verified available property inventory. Use this before quoting or recommending any property. It returns facts and property IDs, never media URLs.',
+        inputSchema: z.object({
+          query: z.string().optional().describe('Property name, type, area or keyword.'),
+          location: z.string().optional().describe('Preferred area or state.'),
+          property_type: z.string().optional().describe('Requested property type.'),
+          bedrooms: z.number().int().positive().optional(),
+          budget_max: z.number().positive().optional(),
+        }),
+        execute: async ({ query, location, property_type, bedrooms, budget_max }) => {
+          const terms = [query, location, property_type].filter(Boolean) as string[]
+          const matches = await this.prisma.properties.findMany({
+            where: {
+              company_id: company.id,
+              status: 'available',
+              ...(bedrooms ? { bedrooms } : {}),
+              ...(budget_max ? { price: { lte: BigInt(Math.round(budget_max)) } } : {}),
+              ...(terms.length
+                ? {
+                    AND: terms.map(term => ({
+                      OR: [
+                        { title: { contains: term, mode: 'insensitive' as const } },
+                        { location: { contains: term, mode: 'insensitive' as const } },
+                        { state: { contains: term, mode: 'insensitive' as const } },
+                        { property_type: { contains: term, mode: 'insensitive' as const } },
+                        { features: { contains: term, mode: 'insensitive' as const } },
+                      ],
+                    })),
+                  }
+                : {}),
+            },
+            orderBy: { updated_at: 'desc' },
+            take: 5,
+          })
+          return JSON.stringify({
+            count: matches.length,
+            matches: matches.map(property => ({
+              id: property.id,
+              title: property.title,
+              propertyType: property.property_type,
+              location: property.location,
+              state: property.state,
+              price: property.price?.toString() || null,
+              priceMax: property.price_max?.toString() || null,
+              currency: property.currency,
+              bedrooms: property.bedrooms,
+              sizeSqm: property.size_sqm,
+              titleDocument: property.title_document,
+              paymentPlan: property.payment_plan,
+              features: property.features,
+              hasMedia: Boolean(property.image_urls || property.video_url),
+            })),
+          })
+        },
+      }),
+
+      send_property_media: tool({
+        description:
+          'Sends one verified hero image for a property returned by search_inventory. Use only when a relevant image would help the buyer.',
+        inputSchema: z.object({
+          property_id: z.number().int().positive(),
+          caption: z.string().max(240).optional(),
+        }),
+        execute: async ({ property_id, caption }) => {
+          const gate = await this.chatLifecycle.gate(contact.id, 'MEDIA_SEND')
+          if (!gate.allowed) return `Media send blocked: ${gate.reason}`
+          const property = await this.prisma.properties.findFirst({
+            where: { id: property_id, company_id: company.id, status: 'available' },
+          })
+          if (!property) return 'Property is unavailable or does not belong to this company.'
+          const images = this.parseMediaUrls(property.image_urls)
+          if (!images.length) return 'No verified property image is available.'
+          await this.contactService.sendMessage(
+            contact,
+            caption || property.title,
+            images[0],
+          )
+          return `Sent one verified image for property ${property.id}. Do not repeat the URL or send another image unless the customer asks.`
+        },
+      }),
     }
 
     // Filter out excluded tools
@@ -801,5 +903,19 @@ export class AiToolsService {
     })
 
     return allTools
+  }
+
+  private parseMediaUrls(value?: string | null): string[] {
+    if (!value) return []
+    try {
+      const parsed = JSON.parse(value)
+      if (Array.isArray(parsed)) return parsed.filter(item => typeof item === 'string')
+    } catch {
+      // Older records use comma or newline separated URLs.
+    }
+    return value
+      .split(/[\n,]/)
+      .map(item => item.trim())
+      .filter(item => /^https:\/\//i.test(item))
   }
 }

@@ -19,6 +19,8 @@ export type AiSdkToolsNames =
   | 'save_timeline'
   | 'save_qualification_notes'
   | 'set_lead_stage'
+  | 'search_inventory'
+  | 'send_property_media'
 
 export type AiSdkToolConfig = ToolSet
 export enum AUTHOR_TYPE {

@@ -99,36 +99,10 @@ export class AiAssistantConfigService {
 
   private async buildInventoryPrompt(companyId: number): Promise<string> {
     try {
-      const properties = await this.prismaService.properties.findMany({
+      const available = await this.prismaService.properties.count({
         where: { company_id: companyId, status: 'available' },
-        orderBy: { id: 'desc' },
-        take: 30,
       })
-
-      if (!properties.length) return ''
-
-      const lines = properties.map(p => {
-        const bits: string[] = [p.title]
-        if (p.property_type) bits.push(p.property_type)
-        if (p.location) bits.push(p.location)
-        if (p.state) bits.push(p.state)
-        if (p.size_sqm) bits.push(`${p.size_sqm} sqm`)
-        if (p.bedrooms) bits.push(`${p.bedrooms} bedrooms`)
-        if (p.title_document) bits.push(`title: ${p.title_document}`)
-        if (p.price != null) {
-          const currency = p.currency || 'NGN'
-          bits.push(
-            p.price_max != null && p.price_max !== p.price
-              ? `price: ${currency} ${p.price} - ${p.price_max}`
-              : `price: ${currency} ${p.price}`,
-          )
-        }
-        if (p.payment_plan) bits.push(`payment: ${p.payment_plan}`)
-        if (p.features) bits.push(`features: ${p.features}`)
-        return `- ${bits.join(' | ')}`
-      })
-
-      return `\n\n## Available Inventory\n\nThese are the ONLY properties you may quote or describe. If a buyer asks about something not listed here, say you will confirm with the office and call notify_company. Never invent a property, price or title status.\n\n${lines.join('\n')}`
+      return `\n\n## Verified Inventory\n\nThe company currently has ${available} available properties. Never rely on memory or invent a listing. Call search_inventory before quoting, comparing or recommending a property. Call send_property_media only with a property ID returned by that search; the backend owns all media URLs.`
     } catch (error) {
       this.logger.error('Failed to build inventory prompt', {
         companyId,

@@ -9,6 +9,8 @@ import { AiRoutingService } from 'src/ai-routing/ai-routing.service'
 import { WhatsBaileyDto } from './dto/whats-bailey.dto'
 import { WbConnectionUpdateDto } from './dto/wb-connection-update.dto'
 import { SocialAttributionService } from 'src/social/services/social-attribution.service'
+import { ChatLifecycleService } from 'src/contact/chat-lifecycle.service'
+import { IntentTriageService } from 'src/contact/intent-triage.service'
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic']
 
@@ -31,6 +33,8 @@ export class WebhookService {
     private readonly storageService: StorageService,
     private readonly socialAttribution: SocialAttributionService,
     private readonly aiRouting: AiRoutingService,
+    private readonly chatLifecycle: ChatLifecycleService,
+    private readonly intentTriage: IntentTriageService,
   ) {}
 
   private async processWebhook({
@@ -110,6 +114,10 @@ export class WebhookService {
             is_replies_activated: false,
           }),
         ])
+        await this.chatLifecycle.transition(contact.id, 'HUMAN_TAKEOVER', {
+          reason: 'A team member replied from WhatsApp',
+          actor: 'team',
+        })
       } else {
         if (!contact.whatsapp_profile_name) {
           this.contactService.updateContact(contact.id, {
@@ -134,13 +142,24 @@ export class WebhookService {
         }
         await this.contactService.resetFollowUps(contact.id)
 
+        let automationAllowed = true
+        if (['NEW', 'COLD_LEAD'].includes((contact as any).chat_state || 'NEW')) {
+          const triage = this.intentTriage.classify(message)
+          await this.chatLifecycle.transition(contact.id, triage.state, {
+            reason: triage.reason,
+            actor: 'customer',
+          })
+          ;(contact as any).chat_state = triage.state
+          automationAllowed = triage.automate
+        }
+
         this.socialAttribution
           .attachIfSocialRef(contact, message)
           .catch(() => undefined)
 
         const shouldProcessMessage =
           message.toLowerCase() === '/reset' ||
-          (company.is_bot_activated &&
+          (automationAllowed && company.is_bot_activated &&
             contact.is_bot_activated &&
             contact.is_replies_activated)
 

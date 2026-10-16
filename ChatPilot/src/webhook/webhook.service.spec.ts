@@ -11,6 +11,8 @@ describe('WebhookService', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
+      {} as any,
     )
   })
 

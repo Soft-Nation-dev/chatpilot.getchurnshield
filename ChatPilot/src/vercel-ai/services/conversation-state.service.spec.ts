@@ -8,7 +8,8 @@ describe('ConversationStateService', () => {
       findUnique: jest.fn(),
     },
   } as any
-  const service = new ConversationStateService(prisma)
+  const chatLifecycle = { transition: jest.fn() } as any
+  const service = new ConversationStateService(prisma, chatLifecycle)
 
   beforeEach(() => jest.clearAllMocks())
 

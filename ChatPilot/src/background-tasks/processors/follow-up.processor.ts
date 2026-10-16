@@ -7,11 +7,14 @@ import { ContactService } from 'src/contact/contact.service'
 import { AiGoogleService } from 'src/vercel-ai/services/ai-google.service'
 import { Contact } from 'src/utils/constants/types'
 import { WhatsAppFormatter } from 'src/utils/services/whatsapp-formatter.helper'
+import { ChatLifecycleService } from 'src/contact/chat-lifecycle.service'
 
-const FOLLOW_UP_STAGE_HOURS = (process.env.FOLLOW_UP_STAGE_HOURS || '24,72')
+const FOLLOW_UP_STAGE_HOURS = (process.env.FOLLOW_UP_STAGE_HOURS || '24')
   .split(',')
   .map(v => Number(v.trim()))
   .filter(v => Number.isFinite(v) && v > 0)
+  .slice(0, 1)
+const COLD_AFTER_FOLLOW_UP_HOURS = 48
 
 const FOLLOW_UP_SYSTEM_PROMPT = `You are a follow-up assistant. Your job is to write a short, friendly follow-up message to a contact who hasn't replied in a while.
 
@@ -43,6 +46,7 @@ export class FollowUpProcessor extends WorkerHost {
     private readonly contactService: ContactService,
     private readonly aiGoogleService: AiGoogleService,
     private readonly waFormattingService: WhatsAppFormatter,
+    private readonly chatLifecycle: ChatLifecycleService,
   ) {
     super()
   }
@@ -55,6 +59,26 @@ export class FollowUpProcessor extends WorkerHost {
       return { checked: 0, sent: 0 }
     }
 
+    const coldCutoff = new Date(
+      Date.now() - COLD_AFTER_FOLLOW_UP_HOURS * 60 * 60 * 1000,
+    )
+    const coldContacts = await this.prisma.contacts.findMany({
+      where: {
+        follow_up_count: { gte: 1 },
+        last_follow_up_at: { lt: coldCutoff },
+        chat_state: { in: ['NEW', 'QUALIFYING', 'QUALIFIED'] },
+        crm_appointment_id: null,
+      },
+      select: { id: true },
+    })
+    for (const stale of coldContacts) {
+      await this.chatLifecycle.transition(stale.id, 'COLD_LEAD', {
+        reason: 'No response within 48 hours of the only follow-up',
+        actor: 'follow_up_scheduler',
+        jobId: String(job.id),
+      })
+    }
+
     const cutoffDate = new Date(
       Date.now() - Math.min(...FOLLOW_UP_STAGE_HOURS) * 60 * 60 * 1000,
     )
@@ -62,7 +86,8 @@ export class FollowUpProcessor extends WorkerHost {
     // Find contacts that need a follow-up
     const contacts = await this.prisma.contacts.findMany({
       where: {
-        follow_up_stage: { lt: FOLLOW_UP_STAGE_HOURS.length },
+        follow_up_count: { lt: 1 },
+        chat_state: { in: ['NEW', 'QUALIFYING', 'QUALIFIED'] },
         is_bot_activated: true,
         is_replies_activated: true,
         crm_appointment_id: null,
@@ -113,6 +138,19 @@ export class FollowUpProcessor extends WorkerHost {
   }
 
   private async sendFollowUp(contact: Contact): Promise<void> {
+    const gate = await this.chatLifecycle.gate(contact.id, 'FOLLOW_UP')
+    if (!gate.allowed) {
+      if (contact.companies?.id) {
+        await this.chatLifecycle.recordAutomation({
+          companyId: contact.companies.id,
+          contactId: contact.id,
+          jobType: 'follow_up',
+          status: 'blocked',
+          details: { reason: gate.reason, state: gate.state },
+        })
+      }
+      return
+    }
     const chatHistory = await this.contactService.getAiChatHistory(
       contact.id,
       true,
@@ -144,6 +182,8 @@ export class FollowUpProcessor extends WorkerHost {
       )
       await this.contactService.updateContact(contact.id, {
         follow_up_stage: FOLLOW_UP_STAGE_HOURS.length,
+        follow_up_count: 1,
+        follow_up_due_at: null,
         is_follow_up_sent: true,
       })
       return
@@ -151,14 +191,28 @@ export class FollowUpProcessor extends WorkerHost {
 
     const contentParts = this.waFormattingService.splitMessage(text)
     for (const part of contentParts) {
+      const sendGate = await this.chatLifecycle.gate(contact.id, 'FOLLOW_UP')
+      if (!sendGate.allowed) return
       await this.contactService.sendMessage(contact, part)
     }
 
     await this.contactService.updateContact(contact.id, {
       follow_up_stage: stage + 1,
+      follow_up_count: 1,
+      follow_up_due_at: null,
       last_follow_up_at: new Date(),
+      last_automated_message_at: new Date(),
       is_follow_up_sent: true,
     })
+    if (contact.companies?.id) {
+      await this.chatLifecycle.recordAutomation({
+        companyId: contact.companies.id,
+        contactId: contact.id,
+        jobType: 'follow_up',
+        status: 'succeeded',
+        details: { stage: 1, maximum: 1 },
+      })
+    }
     this.logger.log(
       `Follow-up sent to contact ${contact.id} (stage ${stage + 1}/${FOLLOW_UP_STAGE_HOURS.length})`,
     )

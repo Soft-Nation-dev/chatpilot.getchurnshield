@@ -10,6 +10,7 @@ import { messages } from '@prisma/client'
 import { buildDegradedReply } from '../degraded-reply'
 import { sanitizeCustomerOutput } from 'src/ai-routing/customer-output-guard'
 import { NotificationsService } from 'src/notifications/notifications.service'
+import { ChatLifecycleService } from 'src/contact/chat-lifecycle.service'
 
 @Processor(BackgroundQueue.REPLIES, { concurrency: 1 })
 export class ReplyProcessor extends WorkerHost {
@@ -19,10 +20,12 @@ export class ReplyProcessor extends WorkerHost {
     private readonly messageProcessingService: UnifiedMessageProcessingService,
     private readonly WaFormattingService: WhatsAppFormatter,
     private readonly notifications: NotificationsService,
+    private readonly chatLifecycle: ChatLifecycleService,
   ) {
     super()
   }
   async process(job: Job, token?: string): Promise<any> {
+    const started = Date.now()
     const contact = await this.contactService.getUnProcessedMessages(
       job.data.clientId,
     )
@@ -35,6 +38,36 @@ export class ReplyProcessor extends WorkerHost {
         messagesProcessed: contactMessagesList,
         generatedReplies: replyMessages,
       }
+    }
+
+    const gate = await this.chatLifecycle.gate(contact.id, 'INBOUND_REPLY')
+    if (!gate.allowed) {
+      await this.contactService.markMessagesProcessed(contact)
+      if (contact.company_id) {
+        await this.chatLifecycle.recordAutomation({
+          companyId: contact.company_id,
+          contactId: contact.id,
+          jobType: 'reply',
+          status: 'blocked',
+          attempt: job.attemptsMade + 1,
+          maxAttempts: job.opts.attempts || 1,
+          jobId: String(job.id),
+          details: { reason: gate.reason, state: gate.state },
+        })
+      }
+      return { blocked: true, reason: gate.reason }
+    }
+
+    if (contact.company_id) {
+      await this.chatLifecycle.recordAutomation({
+        companyId: contact.company_id,
+        contactId: contact.id,
+        jobType: 'reply',
+        status: job.attemptsMade > 0 ? 'retrying' : 'running',
+        attempt: job.attemptsMade + 1,
+        maxAttempts: job.opts.attempts || 1,
+        jobId: String(job.id),
+      })
     }
 
     await this.contactService.mockTypingState(contact as Contact)
@@ -113,6 +146,16 @@ export class ReplyProcessor extends WorkerHost {
         const contentParts = this.WaFormattingService.splitMessage(safeReply)
 
         for (let i = 0; i < contentParts.length; i++) {
+          const sendGate = await this.chatLifecycle.gate(
+            contact.id,
+            'INBOUND_REPLY',
+          )
+          if (!sendGate.allowed) {
+            this.logger.warn(
+              `Outbound reply blocked for contact ${contact.id}: ${sendGate.reason}`,
+            )
+            break
+          }
           const part = contentParts[i]
           const image = this.WaFormattingService.getMarkdownImage(part)
 
@@ -138,9 +181,43 @@ export class ReplyProcessor extends WorkerHost {
           }
         }
         await this.contactService.markMessagesProcessed(contact)
+        await this.contactService.updateContact(contact.id, {
+          last_automated_message_at: new Date(),
+        })
+        if (contact.company_id) {
+          await this.chatLifecycle.recordAutomation({
+            companyId: contact.company_id,
+            contactId: contact.id,
+            jobType: 'reply',
+            status: 'succeeded',
+            attempt: job.attemptsMade + 1,
+            maxAttempts: job.opts.attempts || 1,
+            jobId: String(job.id),
+            latencyMs: Date.now() - started,
+            details: {
+              messagesSent: replyMessages.length,
+              degradedReply,
+            },
+          })
+        }
       } else {
         this.logger.log(`message processing not required `)
       }
+    } catch (error) {
+      if (contact.company_id) {
+        await this.chatLifecycle.recordAutomation({
+          companyId: contact.company_id,
+          contactId: contact.id,
+          jobType: 'reply',
+          status: 'failed',
+          attempt: job.attemptsMade + 1,
+          maxAttempts: job.opts.attempts || 1,
+          jobId: String(job.id),
+          latencyMs: Date.now() - started,
+          error,
+        })
+      }
+      throw error
     } finally {
       await this.contactService.clearTypingState(contact as Contact)
     }

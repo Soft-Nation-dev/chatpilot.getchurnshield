@@ -13,8 +13,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error'
+import { AlertTriangle, CheckCircle2, Clock3, RefreshCw } from 'lucide-react'
 
 const STATUSES = ['all', 'new', 'qualified', 'nurturing', 'handoff', 'closed', 'disqualified']
+const CHAT_STATE_LABELS: Record<string, string> = {
+  NEW: 'New chat', QUALIFYING: 'Qualifying', QUALIFIED: 'Qualified',
+  INSPECTION_PENDING: 'Inspection pending', INSPECTION_BOOKED: 'Booked',
+  HUMAN_TAKEOVER: 'Needs team', CONCLUDED_CLOSED: 'Closed', COLD_LEAD: 'Cold',
+}
 
 export default function LeadsPage() {
   const { user } = useAuth()
@@ -132,6 +138,15 @@ export default function LeadsPage() {
     return 'outline'
   }
 
+  const automationSummary = (lead: Lead) => {
+    const event = lead.contact_operation?.automation_events?.[0]
+    if (!event) return { label: lead.contact_id ? 'Waiting for next run' : 'Not contacted', tone: 'text-slate-500', icon: Clock3 }
+    if (event.status === 'succeeded') return { label: `${event.job_type.replaceAll('_', ' ')} succeeded`, tone: 'text-emerald-700', icon: CheckCircle2 }
+    if (event.status === 'failed') return { label: `Failed · attempt ${event.attempt}/${event.max_attempts}`, tone: 'text-red-700', icon: AlertTriangle }
+    if (event.status === 'retrying') return { label: `Retrying · attempt ${event.attempt}/${event.max_attempts}`, tone: 'text-blue-700', icon: RefreshCw }
+    return { label: `${event.job_type.replaceAll('_', ' ')} ${event.status}`, tone: 'text-amber-700', icon: Clock3 }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -203,12 +218,16 @@ export default function LeadsPage() {
               <TableHead>Location</TableHead>
               <TableHead>Source</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="hidden lg:table-cell">Conversation</TableHead>
+              <TableHead className="hidden xl:table-cell">Last automation</TableHead>
               <TableHead>AI</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {leads.map(lead => (
-              <TableRow key={lead.id} className="hover:bg-slate-50">
+            {leads.map(lead => {
+              const operation = automationSummary(lead)
+              const OperationIcon = operation.icon
+              return <TableRow key={lead.id} className="hover:bg-slate-50">
                 <TableCell><input type="checkbox" aria-label={`Select ${lead.name || 'lead'}`} checked={selectedIds.includes(lead.id)} onChange={() => toggleSelected(lead.id)} className="accent-emerald-600" /></TableCell>
                 <TableCell>
                   <button onClick={() => router.push(`/leads/${lead.id}`)} className="font-medium text-emerald-700 hover:underline">
@@ -221,6 +240,15 @@ export default function LeadsPage() {
                 <TableCell className="text-sm text-muted-foreground">{lead.location_state || '—'}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{lead.source || '—'}</TableCell>
                 <TableCell><Badge variant={badgeVariant(lead.status)} className="capitalize">{lead.status}</Badge></TableCell>
+                <TableCell className="hidden lg:table-cell">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="whitespace-nowrap text-[10px]">{CHAT_STATE_LABELS[lead.contact_operation?.chat_state || ''] || 'Not started'}</Badge>
+                    {lead.contact_operation?.needs_review && <span title="Needs attention"><AlertTriangle className="h-4 w-4 text-amber-500" /></span>}
+                  </div>
+                </TableCell>
+                <TableCell className="hidden xl:table-cell">
+                  <div className={`flex max-w-52 items-center gap-1.5 text-xs capitalize ${operation.tone}`}><OperationIcon className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{operation.label}</span></div>
+                </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1.5">
                     <Switch checked={lead.is_bot_activated} onCheckedChange={() => toggleBot(lead.id, lead.is_bot_activated)}
@@ -229,7 +257,7 @@ export default function LeadsPage() {
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+            })}
           </TableBody>
         </Table>
         {leads.length === 0 && (

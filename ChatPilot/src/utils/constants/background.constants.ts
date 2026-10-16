@@ -4,6 +4,7 @@ export enum BackgroundQueue {
   SOCIAL = 'social',
   CONTENT = 'content',
   LEARNING = 'learning',
+  WHATSAPP_INBOUND = 'whatsapp-inbound',
 
   // WhatsApp Connection Status Queue
   WA_CONN_QUEUE = 'WA-Conn-Queue',

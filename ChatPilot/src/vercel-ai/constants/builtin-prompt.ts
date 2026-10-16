@@ -78,6 +78,14 @@ You have access to the following tools (functions). Use them at the right time b
 - **Stages**: \`engaged\` once they answer questions, \`qualified\` once budget and location are known, \`booked\` once an inspection is scheduled, \`lost\` if they say they are not interested.
 - **Example**: Client gives budget and location → call set_lead_stage({ stage: "qualified" })
 
+### 14. search_inventory
+- **When to use**: Before quoting, comparing or recommending any property.
+- **What it does**: Searches current verified inventory and returns property facts and IDs without exposing media URLs.
+
+### 15. send_property_media
+- **When to use**: After search_inventory finds a relevant property and a picture will help the buyer.
+- **What it does**: Sends one verified hero image directly from the backend. Never paste or repeat a media URL in your reply.
+
 ## Conversation Flow Guidelines
 
 ### Qualification Flow:
@@ -132,7 +140,7 @@ export function buildAssetsPrompt(
   if (!assets || assets.length === 0) return ''
 
   let prompt =
-    '\n\n## Company Files & Media\n\nYou have the following files available to share with clients when relevant:\n\n'
+    '\n\n## Indexed Company Knowledge\n\nThe following indexed files may be used as business context. Their storage URLs are intentionally withheld from the model. Never invent or print a file URL. Property media must be sent only through send_property_media.\n\n'
 
   for (const asset of assets) {
     const fileType = asset.file_type.toUpperCase()
@@ -142,34 +150,10 @@ export function buildAssetsPrompt(
     prompt += `- **Type**: ${fileType}\n`
     prompt += `- **File**: ${asset.file_name}\n`
 
-    if (
-      ['image', 'jpg', 'jpeg', 'png', 'webp'].some(t =>
-        asset.file_type.toLowerCase().includes(t),
-      )
-    ) {
-      prompt += `- **To send**: Use exactly this format: ![${description}](${asset.file_url})\n`
-      prompt += `- **When to send**: When the client asks about or needs to see: ${description}\n\n`
-    } else if (
-      ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].some(t =>
-        asset.file_type.toLowerCase().includes(t),
-      )
-    ) {
-      prompt += `- **To send**: Use exactly this format: ![${description}](${asset.file_url})\n`
-      prompt += `- **When to send**: When the client asks about or requests: ${description}\n\n`
-    } else if (
-      ['video', 'mp4', 'mov', '3gp'].some(t =>
-        asset.file_type.toLowerCase().includes(t),
-      )
-    ) {
-      prompt += `- **To send**: Use exactly this format: ![${description}](${asset.file_url})\n`
-      prompt += `- **When to send**: When the client asks to see a video of: ${description}\n\n`
-    } else {
-      prompt += `- **To send**: ${asset.file_url}\n`
-      prompt += `- **When to send**: When relevant to the conversation about: ${description}\n\n`
-    }
+    prompt += `- **Use**: Business context about ${description}; request a verified backend media action if the customer needs the file.\n\n`
   }
 
-  prompt += `**Important**: When sharing files, always use the exact URL provided above. Do not modify the URLs. Send the files naturally as part of the conversation when the client asks about the related topic.\n`
+  prompt += `**Important**: Storage URLs and media delivery are backend responsibilities, not model output.\n`
 
   return prompt
 }
