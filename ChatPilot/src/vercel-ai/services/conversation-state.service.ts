@@ -62,7 +62,23 @@ export class ConversationStateService {
     _recentMessages: AiChatMessage[],
   ): Promise<PreparedConversationTurn> {
     const message = this.extractCustomerText(rawText)
-    const previousState = this.read(contact)
+    let previousState = this.read(contact)
+    const resumedAfterHandoff =
+      previousState?.inspection?.status === 'awaiting_human' &&
+      (contact as any).chat_state !== 'HUMAN_TAKEOVER' &&
+      (contact as any).is_replies_activated === true
+
+    // Older/manual resume paths could reactivate replies without clearing the
+    // terminal calendar handoff marker. Reconcile that inconsistent state on
+    // the first new message so an already reopened chat cannot keep replaying
+    // the handoff notice.
+    if (resumedAfterHandoff) {
+      previousState = { version: 1 }
+      await this.write(contact.id, previousState)
+      this.logger.log(
+        `Cleared stale awaiting_human state for resumed contact ${contact.id}`,
+      )
+    }
     const existing = this.isActive(previousState?.inspection)
       ? previousState?.inspection
       : undefined

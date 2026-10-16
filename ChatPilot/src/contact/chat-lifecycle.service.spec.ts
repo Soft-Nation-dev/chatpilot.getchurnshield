@@ -46,4 +46,51 @@ describe('ChatLifecycleService', () => {
       ).allowed,
     ).toBe(false)
   })
+
+  it('clears a terminal calendar handoff when an operator resumes automation', async () => {
+    const tx = {
+      contacts: {
+        findUnique: jest.fn().mockResolvedValue({
+          ...base,
+          chat_state: 'HUMAN_TAKEOVER',
+          is_replies_activated: false,
+          conversation_state: {
+            version: 1,
+            inspection: {
+              status: 'awaiting_human',
+              propertyTitle: 'Demo Duplex',
+            },
+          },
+        }),
+        update: jest.fn().mockResolvedValue({ id: 1 }),
+      },
+      chat_state_transitions: { create: jest.fn() },
+    }
+    const prisma = {
+      $transaction: jest.fn((callback: any) => callback(tx)),
+    } as any
+    const lifecycle = new ChatLifecycleService(prisma)
+
+    await lifecycle.resumeAutomation(1, {
+      reason: 'Dashboard action: reopen',
+      actor: 'dashboard_user',
+    })
+
+    expect(tx.contacts.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.objectContaining({
+        is_bot_activated: true,
+        is_replies_activated: true,
+        needs_review: false,
+        chat_state: 'QUALIFYING',
+        conversation_state: { version: 1 },
+      }),
+    })
+    expect(tx.chat_state_transitions.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        from_state: 'HUMAN_TAKEOVER',
+        to_state: 'QUALIFYING',
+      }),
+    })
+  })
 })

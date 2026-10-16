@@ -190,4 +190,42 @@ describe('ConversationStateService', () => {
       /what day|which property|what time/i,
     )
   })
+
+  it('clears awaiting_human automatically when a chat was manually reopened', async () => {
+    prisma.contacts.update.mockResolvedValue({})
+    const contact = {
+      id: 22,
+      name: 'Emmanuel',
+      crm_appointment_id: null,
+      chat_state: 'QUALIFYING',
+      is_replies_activated: true,
+      conversation_state: {
+        version: 1,
+        inspection: {
+          status: 'awaiting_human',
+          propertyId: 7,
+          propertyTitle: 'Demo 4-Bedroom Fully Detached Duplex',
+          requestedDay: 'Saturday',
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      companies: { id: 3 },
+    } as any
+
+    const result = await service.prepareTurn(
+      contact,
+      'Do you have any other properties?',
+      [],
+    )
+
+    expect(result).toMatchObject({
+      state: { version: 1 },
+      systemContext: '',
+      deterministicReply: null,
+    })
+    expect(prisma.contacts.update).toHaveBeenCalledWith({
+      where: { id: 22 },
+      data: { conversation_state: { version: 1 } },
+    })
+  })
 })

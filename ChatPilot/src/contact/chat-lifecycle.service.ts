@@ -110,6 +110,52 @@ export class ChatLifecycleService {
     })
   }
 
+  async resumeAutomation(
+    contactId: number,
+    options: { reason?: string; actor?: string } = {},
+  ) {
+    return this.prisma.$transaction(async tx => {
+      const contact = await tx.contacts.findUnique({ where: { id: contactId } })
+      if (!contact || !contact.company_id) return contact
+
+      const fromState = (contact.chat_state || 'NEW') as ChatState
+      const conversationState = contact.conversation_state as any
+      const clearTerminalHandoff =
+        conversationState?.inspection?.status === 'awaiting_human'
+      const reason = options.reason?.slice(0, 240) || 'Automation resumed'
+      const updated = await tx.contacts.update({
+        where: { id: contactId },
+        data: {
+          is_bot_activated: true,
+          is_replies_activated: true,
+          needs_review: false,
+          chat_state: 'QUALIFYING',
+          chat_state_version: { increment: 1 },
+          state_changed_at: new Date(),
+          state_change_reason: reason,
+          ...(clearTerminalHandoff
+            ? { conversation_state: { version: 1 } }
+            : {}),
+        },
+      })
+
+      if (fromState !== 'QUALIFYING') {
+        await tx.chat_state_transitions.create({
+          data: {
+            company_id: contact.company_id,
+            contact_id: contactId,
+            from_state: fromState,
+            to_state: 'QUALIFYING',
+            reason,
+            actor: options.actor || 'system',
+          },
+        })
+      }
+      this.logger.log(`Contact ${contactId}: ${fromState} -> QUALIFYING`)
+      return updated
+    })
+  }
+
   async recordAutomation(input: {
     companyId: number
     contactId?: number

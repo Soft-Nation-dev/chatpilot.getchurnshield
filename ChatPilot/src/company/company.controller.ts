@@ -427,9 +427,18 @@ export class CompanyController {
     @Body() body: { is_bot_activated: boolean },
   ) {
     await this.verifyOwnership(req.user.userId, id)
+    const contact = await this.contactService.getContactById(contactId)
+    if (!contact || contact.company_id !== id) {
+      throw new UnprocessableEntityException('Contact not found')
+    }
+    if (body.is_bot_activated) {
+      return this.chatLifecycle.resumeAutomation(contactId, {
+        reason: 'Dashboard bot enabled',
+        actor: 'dashboard_user',
+      })
+    }
     return this.contactService.updateContact(contactId, {
-      is_bot_activated: body.is_bot_activated,
-      ...(body.is_bot_activated ? { is_replies_activated: true } : {}),
+      is_bot_activated: false,
     })
   }
 
@@ -478,12 +487,7 @@ export class CompanyController {
       })
     }
     if (body.action === 'resume' || body.action === 'reopen') {
-      await this.contactService.updateContact(contactId, {
-        is_bot_activated: true,
-        is_replies_activated: true,
-        needs_review: false,
-      })
-      return this.chatLifecycle.transition(contactId, 'QUALIFYING', {
+      return this.chatLifecycle.resumeAutomation(contactId, {
         reason,
         actor: 'dashboard_user',
       })
