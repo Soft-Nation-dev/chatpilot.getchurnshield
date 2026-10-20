@@ -39,7 +39,9 @@ $sha = (git rev-parse --short HEAD).Trim()
 if (-not $sha) { throw 'Could not resolve the release commit.' }
 
 $archive = Join-Path $repoRoot "tmp\release-$sha.tar"
-Invoke-Checked git archive --format=tar -o $archive $sha
+# Quote the short option so PowerShell forwards it to Git instead of
+# interpreting `-o` as an abbreviated common parameter (`-OutVariable`).
+Invoke-Checked git archive --format=tar '-o' $archive $sha
 
 if (-not (Test-Path -LiteralPath $deployKey)) {
   throw "Deployment key not found at $deployKey"
