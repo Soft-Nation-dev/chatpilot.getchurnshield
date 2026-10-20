@@ -6,6 +6,7 @@ import {
   Check,
   Clipboard,
   ExternalLink,
+  FileText,
   ImageIcon,
   Loader2,
   RefreshCw,
@@ -90,7 +91,11 @@ export default function MediaLibraryPage() {
       if (!response.ok) throw new Error(await responseMessage(response, 'Could not upload the media file.'))
       const body = await response.json() as { item: MediaItem }
       setItems(current => [body.item, ...current.filter(item => item.key !== body.item.key)])
-      setNotice('Media uploaded. Attach it to a property or use an image in the content composer.')
+      setNotice(
+        file.type === 'application/pdf'
+          ? 'PDF uploaded. Property extraction and deduplication are running in the background.'
+          : 'Media uploaded. Attach it to a property or use an image in the content composer.',
+      )
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not upload the media file.')
     } finally {
@@ -161,7 +166,7 @@ export default function MediaLibraryPage() {
         <h3 className="font-semibold text-slate-900">How to use an image in a social post</h3>
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           {[
-            ['1', 'Upload a JPEG, PNG, WebP, MP4, or MOV file below.'],
+            ['1', 'Upload a JPEG, PNG, WebP, MP4, MOV, or property PDF below.'],
             ['2', 'Add it to a Property Vault record with verified facts and pricing.'],
             ['3', 'Let automation select an available property and prepare a draft.'],
             ['4', 'Review and approve the draft before its scheduled publishing time.'],
@@ -175,7 +180,7 @@ export default function MediaLibraryPage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm lg:p-6">
-        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" onChange={handleFile} className="sr-only" />
+        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,application/pdf" onChange={handleFile} className="sr-only" />
         <div
           onDragEnter={event => { event.preventDefault(); setDragging(true) }}
           onDragOver={event => event.preventDefault()}
@@ -184,8 +189,8 @@ export default function MediaLibraryPage() {
           className={`flex min-h-48 flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-colors ${dragging ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 bg-slate-50/60'}`}
         >
           {uploading ? <Loader2 className="h-9 w-9 animate-spin text-emerald-600" /> : <UploadCloud className="h-9 w-9 text-emerald-600" />}
-          <h3 className="mt-4 font-semibold text-slate-900">{uploading ? 'Uploading your media…' : 'Drop an image or video here'}</h3>
-          <p className="mt-1 text-sm text-slate-500">Images up to 10 MB · MP4/MOV video up to 50 MB</p>
+          <h3 className="mt-4 font-semibold text-slate-900">{uploading ? 'Uploading your media…' : 'Drop an image, video, or property PDF here'}</h3>
+          <p className="mt-1 text-sm text-slate-500">Images up to 10 MB · PDF up to 25 MB · MP4/MOV video up to 50 MB</p>
           <Button className="mt-5" type="button" onClick={() => inputRef.current?.click()} disabled={uploading}>
             {uploading ? 'Please wait' : 'Choose image'}
           </Button>
@@ -216,7 +221,12 @@ export default function MediaLibraryPage() {
             {items.map(item => (
               <article key={item.key} className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm">
                 <a href={item.url} target="_blank" rel="noreferrer" className="block aspect-[4/3] overflow-hidden bg-slate-100">
-                  {item.contentType.startsWith('video/') ? (
+                  {item.contentType === 'application/pdf' ? (
+                    <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-red-50 text-red-700">
+                      <FileText className="h-12 w-12" />
+                      <span className="text-sm font-semibold">Property PDF</span>
+                    </div>
+                  ) : item.contentType.startsWith('video/') ? (
                     <video src={item.url} muted controls preload="metadata" className="h-full w-full object-cover" />
                   ) : (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -234,7 +244,9 @@ export default function MediaLibraryPage() {
                       {copiedKey === item.key ? <Check className="mr-2 h-4 w-4 text-emerald-600" /> : <Clipboard className="mr-2 h-4 w-4" />}
                       {copiedKey === item.key ? 'Copied' : 'Copy link'}
                     </Button>
-                    {item.contentType.startsWith('video/') ? (
+                    {item.contentType === 'application/pdf' ? (
+                      <Link href="/properties" className={buttonVariants({ size: 'sm' })}><Send className="mr-2 h-4 w-4" />View extracted</Link>
+                    ) : item.contentType.startsWith('video/') ? (
                       <Link href="/properties" className={buttonVariants({ size: 'sm' })}><Send className="mr-2 h-4 w-4" />Property Vault</Link>
                     ) : (
                       <Link href={`/content?image=${encodeURIComponent(item.url)}`} className={buttonVariants({ size: 'sm' })}><Send className="mr-2 h-4 w-4" />Use in content</Link>

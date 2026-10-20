@@ -91,6 +91,11 @@ export class UnifiedMessageProcessingService {
       this.logger.log(
         `Conversation state handled scheduling turn for contact ${contact.id}`,
       )
+      await this.conversationStateService.recordExchange(
+        contact.id,
+        text,
+        preparedTurn.deterministicReply,
+      )
       return preparedTurn.deterministicReply
     }
 
@@ -98,6 +103,12 @@ export class UnifiedMessageProcessingService {
       contactWithCompanies,
       chatHistory,
       preparedTurn.systemContext,
+    )
+
+    await this.conversationStateService.recordExchange(
+      contact.id,
+      text,
+      response.text,
     )
 
     return response.text

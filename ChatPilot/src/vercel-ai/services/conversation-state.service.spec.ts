@@ -2,11 +2,12 @@ import { ConversationStateService } from './conversation-state.service'
 
 describe('ConversationStateService', () => {
   const prisma = {
-    properties: { findMany: jest.fn() },
+    properties: { findMany: jest.fn(), findFirst: jest.fn() },
     contacts: {
       update: jest.fn(),
       findUnique: jest.fn(),
     },
+    messages: { findFirst: jest.fn() },
   } as any
   const chatLifecycle = { transition: jest.fn() } as any
   const service = new ConversationStateService(prisma, chatLifecycle)
@@ -227,5 +228,82 @@ describe('ConversationStateService', () => {
       where: { id: 22 },
       data: { conversation_state: { version: 1 } },
     })
+  })
+
+  it('recalls the active property and rotates to unsent pictures without an AI call', async () => {
+    const state = {
+      version: 1,
+      memory: {
+        activePropertyId: 7,
+        activePropertyTitle: 'Demo Duplex',
+        sentMedia: [
+          {
+            propertyId: 7,
+            url: 'https://cdn.test/one.jpg',
+            sentAt: new Date().toISOString(),
+          },
+        ],
+        updatedAt: new Date().toISOString(),
+      },
+    }
+    prisma.properties.findFirst.mockResolvedValue({
+      id: 7,
+      title: 'Demo Duplex',
+      location: 'Lekki Phase 1',
+      image_urls:
+        'https://cdn.test/one.jpg,https://cdn.test/two.jpg,https://cdn.test/three.jpg',
+    })
+    prisma.contacts.findUnique.mockResolvedValue({ conversation_state: state })
+    prisma.contacts.update.mockResolvedValue({})
+    const contact = {
+      id: 22,
+      chat_state: 'QUALIFYING',
+      is_replies_activated: true,
+      conversation_state: state,
+      companies: { id: 3 },
+    } as any
+
+    const result = await service.prepareTurn(
+      contact,
+      'Good morning, please send the pictures of the property again.',
+      [],
+    )
+
+    expect(result.deterministicReply).toContain('https://cdn.test/two.jpg')
+    expect(result.deterministicReply).toContain('https://cdn.test/three.jpg')
+    expect(result.deterministicReply).not.toContain('https://cdn.test/one.jpg')
+    expect(prisma.properties.findMany).not.toHaveBeenCalled()
+  })
+
+  it('backfills active-property memory from the last image sent before this upgrade', async () => {
+    prisma.messages.findFirst.mockResolvedValue({
+      image_url: 'https://cdn.test/legacy.jpg',
+    })
+    prisma.properties.findFirst.mockResolvedValue({
+      id: 8,
+      title: 'Legacy Lekki Duplex',
+      location: 'Lekki',
+      image_urls: 'https://cdn.test/legacy.jpg,https://cdn.test/fresh.jpg',
+    })
+    prisma.contacts.findUnique.mockResolvedValue({
+      conversation_state: { version: 1 },
+    })
+    prisma.contacts.update.mockResolvedValue({})
+    const contact = {
+      id: 23,
+      chat_state: 'QUALIFYING',
+      is_replies_activated: true,
+      conversation_state: { version: 1 },
+      companies: { id: 3 },
+    } as any
+
+    const result = await service.prepareTurn(
+      contact,
+      'Please send the picture of the property again.',
+      [],
+    )
+
+    expect(result.deterministicReply).toContain('https://cdn.test/fresh.jpg')
+    expect(prisma.contacts.update).toHaveBeenCalled()
   })
 })

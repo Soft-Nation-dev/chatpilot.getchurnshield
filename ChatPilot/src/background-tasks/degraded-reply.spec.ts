@@ -56,4 +56,30 @@ describe('buildDegradedReply', () => {
     expect(reply).toMatch(/team is confirming/i)
     expect(reply).not.toMatch(/what day|what time|which property/i)
   })
+
+  it('resends remembered property media when providers are unavailable', () => {
+    const reply = buildDegradedReply(
+      {
+        ...contact,
+        conversation_state: {
+          version: 1,
+          memory: {
+            activePropertyId: 42,
+            activePropertyTitle: 'Demo Duplex',
+            sentMedia: [
+              {
+                propertyId: 42,
+                url: 'https://cdn.test/demo.jpg',
+                sentAt: new Date().toISOString(),
+              },
+            ],
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      } as any,
+      'Please send the picture again',
+    )
+
+    expect(reply).toBe('![Demo Duplex](https://cdn.test/demo.jpg)')
+  })
 })

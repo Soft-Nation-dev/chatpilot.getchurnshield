@@ -21,6 +21,9 @@ import {
 } from 'src/common/crypto/contact-crypto'
 import { createHash } from 'node:crypto'
 import AdmZip from 'adm-zip'
+import { InjectQueue } from '@nestjs/bullmq'
+import { Queue } from 'bullmq'
+import { BackgroundQueue } from 'src/utils/constants/background.constants'
 
 const OTP_TTL_MS = 60 * 1000
 
@@ -34,6 +37,8 @@ export class CompanyService {
     private readonly whatsBaileyService: WhatsBaileyService,
     private readonly storageService: StorageService,
     private readonly aiRouting: AiRoutingService,
+    @InjectQueue(BackgroundQueue.CONTENT)
+    private readonly contentQueue: Queue,
   ) {}
 
   async findByPhone(targetPhone: number | string | bigint) {
@@ -647,7 +652,15 @@ Generate ONLY the system prompt text, no explanations.`,
       fileType,
     )
 
-    return { ...asset, extracted_images: extracted }
+    if (fileType === 'pdf') {
+      await this.queueDocumentIndex(asset.id, companyId)
+    }
+
+    return {
+      ...asset,
+      extracted_images: extracted,
+      property_indexing: fileType === 'pdf' ? 'queued' : 'not_applicable',
+    }
   }
 
   async registerExternalMedia(
@@ -663,8 +676,13 @@ Generate ONLY the system prompt text, no explanations.`,
     if (!/^https:\/\//i.test(input.url)) {
       throw new UnprocessableEntityException('Media URL must use HTTPS')
     }
-    const fileType = input.contentType.startsWith('video/') ? 'video' : 'image'
-    return this.prisma.company_assets.upsert({
+    const fileType =
+      input.contentType === 'application/pdf'
+        ? 'pdf'
+        : input.contentType.startsWith('video/')
+          ? 'video'
+          : 'image'
+    const asset = await this.prisma.company_assets.upsert({
       where: {
         company_id_file_url: { company_id: companyId, file_url: input.url },
       },
@@ -684,6 +702,43 @@ Generate ONLY the system prompt text, no explanations.`,
         source_ref: input.key?.slice(0, 120) || null,
       },
     })
+    if (fileType === 'pdf') {
+      const extractedChildren = await this.prisma.company_assets.count({
+        where: {
+          company_id: companyId,
+          source: 'document-extract',
+          source_ref: String(asset.id),
+        },
+      })
+      if (!extractedChildren) {
+        try {
+          const response = await fetch(input.url, {
+            signal: AbortSignal.timeout(20_000),
+          })
+          if (response.ok) {
+            const length = Number(response.headers.get('content-length') || 0)
+            if (!length || length <= 25 * 1024 * 1024) {
+              const buffer = Buffer.from(await response.arrayBuffer())
+              if (buffer.length <= 25 * 1024 * 1024) {
+                await this.extractDocumentImages(
+                  companyId,
+                  asset.id,
+                  asset.file_name,
+                  buffer,
+                  'pdf',
+                )
+              }
+            }
+          }
+        } catch (error) {
+          this.logger.warn(
+            `Could not extract R2 PDF images for asset ${asset.id}: ${error?.message}`,
+          )
+        }
+      }
+      await this.queueDocumentIndex(asset.id, companyId)
+    }
+    return asset
   }
 
   async registerExternalMediaBatch(
@@ -696,7 +751,9 @@ Generate ONLY the system prompt text, no explanations.`,
       size?: number
     }>,
   ) {
-    const safe = items.slice(0, 100).filter(item => /^https:\/\//i.test(item.url))
+    const safe = items
+      .slice(0, 100)
+      .filter(item => /^https:\/\//i.test(item.url))
     const registered: unknown[] = []
     for (const item of safe) {
       registered.push(await this.registerExternalMedia(companyId, item))
@@ -747,7 +804,9 @@ Generate ONLY the system prompt text, no explanations.`,
           if (candidates.length >= 8) break
         }
       } catch (error) {
-        this.logger.warn(`Could not extract images from ${fileName}: ${error?.message}`)
+        this.logger.warn(
+          `Could not extract images from ${fileName}: ${error?.message}`,
+        )
       }
     }
 
@@ -783,7 +842,12 @@ Generate ONLY the system prompt text, no explanations.`,
         select: { id: true },
       })
       if (duplicate) continue
-      const ext = candidate.mime === 'image/png' ? 'png' : candidate.mime === 'image/webp' ? 'webp' : 'jpg'
+      const ext =
+        candidate.mime === 'image/png'
+          ? 'png'
+          : candidate.mime === 'image/webp'
+            ? 'webp'
+            : 'jpg'
       const extractedName = `${fileName.replace(/\.[^.]+$/, '')}-image-${index + 1}.${ext}`
       const url = await this.storageService.uploadCompanyAsset(
         companyId,
@@ -808,6 +872,20 @@ Generate ONLY the system prompt text, no explanations.`,
       created++
     }
     return created
+  }
+
+  private async queueDocumentIndex(assetId: number, companyId: number) {
+    await this.contentQueue.add(
+      'index-document',
+      { assetId, companyId },
+      {
+        jobId: `index-document-${assetId}`,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30_000 },
+        removeOnComplete: 100,
+        removeOnFail: 100,
+      },
+    )
   }
 
   async getAssets(companyId: number) {

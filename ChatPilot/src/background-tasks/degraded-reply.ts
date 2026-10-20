@@ -40,6 +40,32 @@ export function buildDegradedReply(contact: Contact, rawMessage: string) {
         requestedTime?: string
       }
     | undefined
+  const memory = (contact as any).conversation_state?.memory as
+    | {
+        activePropertyId?: number
+        activePropertyTitle?: string
+        activePropertyLocation?: string
+        brief?: string
+        sentMedia?: Array<{ propertyId: number; url: string }>
+      }
+    | undefined
+
+  if (
+    /\b(?:photo|photos|picture|pictures|image|images)\b/i.test(message) &&
+    memory?.activePropertyId
+  ) {
+    const media = (memory.sentMedia || [])
+      .filter(item => item.propertyId === memory.activePropertyId)
+      .slice(-3)
+    if (media.length) {
+      return media
+        .map(
+          (item, index) =>
+            `![${memory.activePropertyTitle || 'Property'}${media.length > 1 ? ` — photo ${index + 1}` : ''}](${item.url})`,
+        )
+        .join('\n\n')
+    }
+  }
 
   if (inspection?.status === 'awaiting_human') {
     return `I have your inspection request${
@@ -68,6 +94,13 @@ export function buildDegradedReply(contact: Contact, rawMessage: string) {
       message,
     )
   ) {
+    if (memory?.activePropertyTitle) {
+      return `${greeting} We were discussing ${memory.activePropertyTitle}${
+        memory.activePropertyLocation
+          ? ` in ${memory.activePropertyLocation}`
+          : ''
+      }. What detail would you like me to clarify?`
+    }
     if (inspection?.propertyTitle) {
       return `${greeting} I have ${inspection.propertyTitle} noted. What detail would you like me to clarify?`
     }
@@ -93,6 +126,14 @@ export function buildDegradedReply(contact: Contact, rawMessage: string) {
 
   if (/\b(yes|share|send|details|okay|ok|please|pls)\b/i.test(message)) {
     return `${greeting} Tell me the property name or preferred location so I can match the right details to your request.`
+  }
+
+  if (memory?.activePropertyTitle) {
+    return `${greeting} I still have ${memory.activePropertyTitle}${
+      memory.activePropertyLocation
+        ? ` in ${memory.activePropertyLocation}`
+        : ''
+    } as the active property in this chat. What would you like to know about it?`
   }
 
   return `${greeting} I’ve saved your message. Please share the property type, preferred location, and budget so we can continue without losing your request.`

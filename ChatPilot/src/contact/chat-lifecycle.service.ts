@@ -134,7 +134,14 @@ export class ChatLifecycleService {
           state_changed_at: new Date(),
           state_change_reason: reason,
           ...(clearTerminalHandoff
-            ? { conversation_state: { version: 1 } }
+            ? {
+                conversation_state: {
+                  version: 1,
+                  ...(conversationState?.memory
+                    ? { memory: conversationState.memory }
+                    : {}),
+                },
+              }
             : {}),
         },
       })
@@ -160,7 +167,13 @@ export class ChatLifecycleService {
     companyId: number
     contactId?: number
     jobType: string
-    status: 'queued' | 'running' | 'succeeded' | 'failed' | 'blocked' | 'retrying'
+    status:
+      | 'queued'
+      | 'running'
+      | 'succeeded'
+      | 'failed'
+      | 'blocked'
+      | 'retrying'
     attempt?: number
     maxAttempts?: number
     jobId?: string
@@ -180,7 +193,8 @@ export class ChatLifecycleService {
         job_id: input.jobId || null,
         latency_ms: input.latencyMs,
         error_code: error?.name?.slice(0, 80) || null,
-        error_message: error?.message || (input.error ? String(input.error) : null),
+        error_message:
+          error?.message || (input.error ? String(input.error) : null),
         details: input.details as any,
         completed_at: ['succeeded', 'failed', 'blocked'].includes(input.status)
           ? new Date()

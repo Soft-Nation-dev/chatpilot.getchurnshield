@@ -10,6 +10,15 @@ export class ContentSchedulerService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    await this.contentQueue.add(
+      'index-media',
+      {},
+      {
+        jobId: `media-index-startup-${new Date().toISOString().slice(0, 10)}`,
+        removeOnComplete: 30,
+        removeOnFail: 30,
+      },
+    )
     await this.contentQueue.upsertJobScheduler(
       'content-publish-check',
       { pattern: '*/10 * * * *' },

@@ -19,6 +19,10 @@ export class ContentProcessor extends WorkerHost {
   }
 
   async process(job: Job): Promise<any> {
+    if (job.name === 'index-document' && job.data?.assetId) {
+      const extracted = await this.media.indexDocument(Number(job.data.assetId))
+      return { assetId: job.data.assetId, extracted }
+    }
     if (job.name === 'index-media') {
       const indexed = await this.media.indexPendingAll()
       return { indexed }

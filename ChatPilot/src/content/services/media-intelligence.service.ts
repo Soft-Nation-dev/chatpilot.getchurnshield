@@ -4,6 +4,7 @@ import { AiRoutingService } from 'src/ai-routing/ai-routing.service'
 import { AiWorkload } from 'src/ai-routing/ai-routing.types'
 import { PrismaService } from 'src/prisma/prisma.service'
 import { NotificationsService } from 'src/notifications/notifications.service'
+import { createHash } from 'node:crypto'
 
 type MediaCandidate = {
   url: string
@@ -13,6 +14,24 @@ type MediaCandidate = {
   createdAt: Date
   lastUsedAt: Date | null
   useCount: number
+}
+
+type ExtractedProperty = {
+  title: string
+  description?: string | null
+  property_type?: string | null
+  location?: string | null
+  state?: string | null
+  price?: number | null
+  price_max?: number | null
+  currency?: string | null
+  size_sqm?: number | null
+  bedrooms?: number | null
+  bathrooms?: number | null
+  title_document?: string | null
+  payment_plan?: string | null
+  features?: string | null
+  status?: string | null
 }
 
 @Injectable()
@@ -160,7 +179,13 @@ export class MediaIntelligenceService {
 
   async indexPendingAll(): Promise<number> {
     const companies = await this.prisma.company_assets.findMany({
-      where: { indexed_at: null, file_type: { in: ['image', 'pdf'] } },
+      where: {
+        OR: [
+          { indexed_at: null, file_type: 'image' },
+          { property_extracted_at: null, file_type: 'pdf' },
+          { indexed_at: null, file_type: 'pdf' },
+        ],
+      },
       distinct: ['company_id'],
       select: { company_id: true },
     })
@@ -186,7 +211,30 @@ export class MediaIntelligenceService {
       },
     })
     const remaining = Math.max(0, budget - used)
-    const assets = remaining
+    const documents = remaining
+      ? await this.prisma.company_assets.findMany({
+          where: {
+            company_id: companyId,
+            file_type: 'pdf',
+            property_extracted_at: null,
+          },
+          orderBy: { created_at: 'asc' },
+          take: Math.min(2, remaining),
+        })
+      : []
+    let indexed = 0
+    for (const document of documents) {
+      try {
+        await this.indexDocument(document.id, false)
+        indexed++
+      } catch (error) {
+        this.logger.warn(
+          `Property extraction failed for document ${document.id}: ${error?.message}`,
+        )
+      }
+    }
+    const imageBudget = Math.max(0, remaining - documents.length)
+    const assets = imageBudget
       ? await this.prisma.company_assets.findMany({
           where: {
             company_id: companyId,
@@ -194,10 +242,9 @@ export class MediaIntelligenceService {
             file_type: 'image',
           },
           orderBy: { created_at: 'asc' },
-          take: remaining,
+          take: imageBudget,
         })
       : []
-    let indexed = 0
     for (const asset of assets) {
       try {
         const result = await this.aiRouting.generate({
@@ -244,19 +291,352 @@ export class MediaIntelligenceService {
         )
       }
     }
+    await this.refreshDocumentPropertyMedia(companyId)
     indexed += await this.indexDocumentParents(companyId)
     if (indexed) {
       await this.notifications.create({
         companyId,
         type: 'media_indexed',
         severity: 'success',
-        title: `${indexed} media item${indexed === 1 ? '' : 's'} indexed`,
+        title: `${indexed} knowledge item${indexed === 1 ? '' : 's'} indexed`,
         message:
-          'New property and business media is now available for smarter content matching.',
+          'New property records and business media are now available for smarter chat and content matching.',
         entity: 'media',
       })
     }
     return indexed
+  }
+
+  async indexDocument(
+    assetId: number,
+    notify: boolean = true,
+  ): Promise<number> {
+    const document = await this.prisma.company_assets.findFirst({
+      where: { id: assetId, file_type: 'pdf' },
+    })
+    if (!document) return 0
+    if (document.property_extracted_at) {
+      return document.extracted_property_count
+    }
+
+    const documentText = await this.extractPdfText(document.file_url)
+    const result = await this.aiRouting.generate({
+      workload: documentText ? AiWorkload.Content : AiWorkload.MediaIndex,
+      companyId: document.company_id,
+      system:
+        'Extract only explicitly stated real-estate listings from the supplied PDF. Never infer or invent a price, location, title document, availability, room count, or feature. Return strict JSON only: {"properties":[{"title":"","description":null,"property_type":null,"location":null,"state":null,"price":null,"price_max":null,"currency":"NGN","size_sqm":null,"bedrooms":null,"bathrooms":null,"title_document":null,"payment_plan":null,"features":null,"status":"available|reserved|sold|hidden"}]}. Use numeric naira values without commas. Omit brochures that contain no identifiable property listings by returning an empty properties array. Keep each description factual and under 600 characters.',
+      messages: documentText
+        ? [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Extract the distinct property listings in ${document.file_name}. Existing description: ${document.description || 'none'}\n\nPDF text:\n${documentText}`,
+                },
+              ],
+            },
+          ]
+        : [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Extract the distinct property listings in ${document.file_name}. Existing description: ${document.description || 'none'}`,
+                },
+                {
+                  type: 'file',
+                  data: new URL(document.file_url),
+                  mediaType: document.mime_type || 'application/pdf',
+                },
+              ],
+            },
+          ],
+      maxOutputTokens: 2200,
+      temperature: 0.1,
+    })
+    const extracted = this.parseDocumentProperties(result.text)
+    const saved = await this.saveDocumentProperties(document, extracted)
+    await this.prisma.company_assets.update({
+      where: { id: document.id },
+      data: {
+        property_extracted_at: new Date(),
+        extracted_property_count: saved,
+      },
+    })
+    if (notify) {
+      await this.notifications.create({
+        companyId: document.company_id,
+        type: 'property_indexed',
+        severity: saved ? 'success' : 'info',
+        title: saved
+          ? `${saved} propert${saved === 1 ? 'y' : 'ies'} extracted`
+          : 'PDF indexing completed',
+        message: saved
+          ? `${document.file_name} was converted into deduplicated Property Vault records.`
+          : `${document.file_name} did not contain a new identifiable property listing.`,
+        entity: 'property',
+      })
+    }
+    return saved
+  }
+
+  private async saveDocumentProperties(
+    document: {
+      id: number
+      company_id: number
+    },
+    extracted: ExtractedProperty[],
+  ): Promise<number> {
+    const current = await this.prisma.properties.findMany({
+      where: { company_id: document.company_id },
+    })
+    const children = await this.prisma.company_assets.findMany({
+      where: {
+        company_id: document.company_id,
+        source: 'document-extract',
+        source_ref: String(document.id),
+        file_type: 'image',
+      },
+    })
+    let saved = 0
+    for (const property of extracted.slice(0, 50)) {
+      const title = this.cleanText(property.title, 200)
+      if (!title) continue
+      const location = this.cleanText(property.location, 120)
+      const fingerprint = createHash('sha256')
+        .update(`${this.normalized(title)}|${this.normalized(location || '')}`)
+        .digest('hex')
+      const duplicate = current.find(
+        item =>
+          this.normalized(item.title) === this.normalized(title) &&
+          (!location ||
+            !item.location ||
+            this.normalized(item.location) === this.normalized(location)),
+      )
+      const images = this.imagesForExtractedProperty(
+        property,
+        children,
+        extracted.length,
+      )
+      if (duplicate) {
+        const mergedImages = [
+          ...new Set([...this.urls(duplicate.image_urls), ...images]),
+        ]
+        await this.prisma.properties.update({
+          where: { id: duplicate.id },
+          data: {
+            description: duplicate.description || property.description || null,
+            property_type:
+              duplicate.property_type || property.property_type || null,
+            location: duplicate.location || location || null,
+            state: duplicate.state || this.cleanText(property.state, 60),
+            price: duplicate.price || this.bigInt(property.price),
+            price_max: duplicate.price_max || this.bigInt(property.price_max),
+            size_sqm: duplicate.size_sqm || this.integer(property.size_sqm),
+            bedrooms: duplicate.bedrooms || this.integer(property.bedrooms),
+            bathrooms: duplicate.bathrooms || this.integer(property.bathrooms),
+            title_document:
+              duplicate.title_document ||
+              this.cleanText(property.title_document, 60),
+            payment_plan:
+              duplicate.payment_plan || property.payment_plan || null,
+            features: duplicate.features || property.features || null,
+            image_urls: mergedImages.length
+              ? mergedImages.slice(0, 10).join(',')
+              : duplicate.image_urls,
+          },
+        })
+        saved++
+        continue
+      }
+      const created = await this.prisma.properties.create({
+        data: {
+          company_id: document.company_id,
+          title,
+          description: this.cleanText(property.description, 3000),
+          property_type: this.cleanText(property.property_type, 50),
+          location,
+          state: this.cleanText(property.state, 60),
+          price: this.bigInt(property.price),
+          price_max: this.bigInt(property.price_max),
+          currency: this.cleanText(property.currency, 8) || 'NGN',
+          size_sqm: this.integer(property.size_sqm),
+          bedrooms: this.integer(property.bedrooms),
+          bathrooms: this.integer(property.bathrooms),
+          title_document: this.cleanText(property.title_document, 60),
+          payment_plan: this.cleanText(property.payment_plan, 1000),
+          features: this.cleanText(property.features, 3000),
+          image_urls: images.length ? images.slice(0, 10).join(',') : null,
+          status: this.propertyStatus(property.status),
+          source_asset_id: document.id,
+          source_fingerprint: fingerprint,
+        },
+      })
+      current.push(created)
+      saved++
+    }
+    return saved
+  }
+
+  private async refreshDocumentPropertyMedia(companyId: number) {
+    const properties = await this.prisma.properties.findMany({
+      where: { company_id: companyId, source_asset_id: { not: null } },
+    })
+    const groups = new Map<number, typeof properties>()
+    for (const property of properties) {
+      if (!property.source_asset_id) continue
+      const group = groups.get(property.source_asset_id) || []
+      group.push(property)
+      groups.set(property.source_asset_id, group)
+    }
+    for (const [assetId, group] of groups) {
+      const children = await this.prisma.company_assets.findMany({
+        where: {
+          company_id: companyId,
+          source: 'document-extract',
+          source_ref: String(assetId),
+          file_type: 'image',
+        },
+      })
+      for (const property of group) {
+        const selected = this.imagesForExtractedProperty(
+          {
+            title: property.title,
+            location: property.location,
+            property_type: property.property_type,
+          },
+          children,
+          group.length,
+        )
+        const merged = [
+          ...new Set([...this.urls(property.image_urls), ...selected]),
+        ].slice(0, 10)
+        if (merged.join(',') === (property.image_urls || '')) continue
+        await this.prisma.properties.update({
+          where: { id: property.id },
+          data: { image_urls: merged.length ? merged.join(',') : null },
+        })
+      }
+    }
+  }
+
+  private imagesForExtractedProperty(
+    property: ExtractedProperty,
+    children: Array<{
+      file_url: string
+      file_name: string
+      description: string | null
+      ai_summary: string | null
+      ai_tags: string | null
+    }>,
+    propertyCount: number,
+  ): string[] {
+    if (propertyCount === 1) return children.map(child => child.file_url)
+    const tokens = new Set(
+      [property.title, property.location, property.property_type]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter(token => token.length > 3),
+    )
+    return children
+      .map(child => {
+        const text = [
+          child.file_name,
+          child.description,
+          child.ai_summary,
+          child.ai_tags,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        const score = [...tokens].filter(token => text.includes(token)).length
+        return { url: child.file_url, score }
+      })
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(item => item.url)
+  }
+
+  private parseDocumentProperties(raw: string): ExtractedProperty[] {
+    try {
+      const start = raw.indexOf('{')
+      const end = raw.lastIndexOf('}')
+      if (start < 0 || end <= start) return []
+      const parsed = JSON.parse(raw.slice(start, end + 1))
+      return Array.isArray(parsed?.properties)
+        ? parsed.properties.filter(
+            (item: unknown) =>
+              item &&
+              typeof item === 'object' &&
+              typeof (item as any).title === 'string',
+          )
+        : []
+    } catch {
+      return []
+    }
+  }
+
+  private async extractPdfText(url: string): Promise<string | null> {
+    try {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(20_000),
+      })
+      if (!response.ok) return null
+      const length = Number(response.headers.get('content-length') || 0)
+      if (length > 25 * 1024 * 1024) return null
+      const buffer = Buffer.from(await response.arrayBuffer())
+      if (!buffer.length || buffer.length > 25 * 1024 * 1024) return null
+      const pdfParse = require('pdf-parse') as (
+        input: Buffer,
+      ) => Promise<{ text?: string }>
+      const parsed = await pdfParse(buffer)
+      const text = String(parsed?.text || '')
+        .replace(/\u0000/g, ' ')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+      return text.length >= 40 ? text.slice(0, 40_000) : null
+    } catch (error) {
+      this.logger.warn(`Local PDF text extraction failed: ${error?.message}`)
+      return null
+    }
+  }
+
+  private propertyStatus(value?: string | null): string {
+    const normalized = String(value || '').toLowerCase()
+    return ['available', 'reserved', 'sold', 'hidden'].includes(normalized)
+      ? normalized
+      : 'available'
+  }
+
+  private integer(value?: number | null): number | null {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : null
+  }
+
+  private bigInt(value?: number | null): bigint | null {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed >= 0
+      ? BigInt(Math.round(parsed))
+      : null
+  }
+
+  private cleanText(value: unknown, max: number): string | null {
+    const cleaned = String(value || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return cleaned ? cleaned.slice(0, max) : null
+  }
+
+  private normalized(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
   }
 
   private async indexDocumentParents(companyId: number): Promise<number> {

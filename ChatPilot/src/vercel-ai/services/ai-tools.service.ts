@@ -117,10 +117,14 @@ export class AiToolsService {
               this.contactService.sendMessageToCompany(contact, message),
             ])
             if (value) {
-              await this.chatLifecycle.transition(contact.id, 'HUMAN_TAKEOVER', {
-                reason: reason || 'AI requested human review',
-                actor: 'ai_tool',
-              })
+              await this.chatLifecycle.transition(
+                contact.id,
+                'HUMAN_TAKEOVER',
+                {
+                  reason: reason || 'AI requested human review',
+                  actor: 'ai_tool',
+                },
+              )
             }
 
             this.logger.log('tool call finished', {
@@ -815,29 +819,70 @@ export class AiToolsService {
         description:
           'Searches verified available property inventory. Use this before quoting or recommending any property. It returns facts and property IDs, never media URLs.',
         inputSchema: z.object({
-          query: z.string().optional().describe('Property name, type, area or keyword.'),
+          query: z
+            .string()
+            .optional()
+            .describe('Property name, type, area or keyword.'),
           location: z.string().optional().describe('Preferred area or state.'),
-          property_type: z.string().optional().describe('Requested property type.'),
+          property_type: z
+            .string()
+            .optional()
+            .describe('Requested property type.'),
           bedrooms: z.number().int().positive().optional(),
           budget_max: z.number().positive().optional(),
         }),
-        execute: async ({ query, location, property_type, bedrooms, budget_max }) => {
-          const terms = [query, location, property_type].filter(Boolean) as string[]
+        execute: async ({
+          query,
+          location,
+          property_type,
+          bedrooms,
+          budget_max,
+        }) => {
+          const terms = [query, location, property_type].filter(
+            Boolean,
+          ) as string[]
           const matches = await this.prisma.properties.findMany({
             where: {
               company_id: company.id,
               status: 'available',
               ...(bedrooms ? { bedrooms } : {}),
-              ...(budget_max ? { price: { lte: BigInt(Math.round(budget_max)) } } : {}),
+              ...(budget_max
+                ? { price: { lte: BigInt(Math.round(budget_max)) } }
+                : {}),
               ...(terms.length
                 ? {
                     AND: terms.map(term => ({
                       OR: [
-                        { title: { contains: term, mode: 'insensitive' as const } },
-                        { location: { contains: term, mode: 'insensitive' as const } },
-                        { state: { contains: term, mode: 'insensitive' as const } },
-                        { property_type: { contains: term, mode: 'insensitive' as const } },
-                        { features: { contains: term, mode: 'insensitive' as const } },
+                        {
+                          title: {
+                            contains: term,
+                            mode: 'insensitive' as const,
+                          },
+                        },
+                        {
+                          location: {
+                            contains: term,
+                            mode: 'insensitive' as const,
+                          },
+                        },
+                        {
+                          state: {
+                            contains: term,
+                            mode: 'insensitive' as const,
+                          },
+                        },
+                        {
+                          property_type: {
+                            contains: term,
+                            mode: 'insensitive' as const,
+                          },
+                        },
+                        {
+                          features: {
+                            contains: term,
+                            mode: 'insensitive' as const,
+                          },
+                        },
                       ],
                     })),
                   }
@@ -846,6 +891,13 @@ export class AiToolsService {
             orderBy: { updated_at: 'desc' },
             take: 5,
           })
+          if (matches.length === 1) {
+            await this.conversationStateService.recordPropertyMedia(
+              contact.id,
+              matches[0],
+              [],
+            )
+          }
           return JSON.stringify({
             count: matches.length,
             matches: matches.map(property => ({
@@ -870,26 +922,56 @@ export class AiToolsService {
 
       send_property_media: tool({
         description:
-          'Sends one verified hero image for a property returned by search_inventory. Use only when a relevant image would help the buyer.',
+          'Sends verified images for a property returned by search_inventory. The backend remembers what was sent and prioritizes unseen images. Use limit 1 normally or up to 3 when the customer explicitly asks for pictures, more pictures, or all available photos.',
         inputSchema: z.object({
           property_id: z.number().int().positive(),
           caption: z.string().max(240).optional(),
+          limit: z.number().int().min(1).max(3).optional(),
         }),
-        execute: async ({ property_id, caption }) => {
+        execute: async ({ property_id, caption, limit }) => {
           const gate = await this.chatLifecycle.gate(contact.id, 'MEDIA_SEND')
           if (!gate.allowed) return `Media send blocked: ${gate.reason}`
           const property = await this.prisma.properties.findFirst({
-            where: { id: property_id, company_id: company.id, status: 'available' },
+            where: {
+              id: property_id,
+              company_id: company.id,
+              status: 'available',
+            },
           })
-          if (!property) return 'Property is unavailable or does not belong to this company.'
+          if (!property)
+            return 'Property is unavailable or does not belong to this company.'
           const images = this.parseMediaUrls(property.image_urls)
           if (!images.length) return 'No verified property image is available.'
-          await this.contactService.sendMessage(
-            contact,
-            caption || property.title,
-            images[0],
+          const latest = await this.prisma.contacts.findUnique({
+            where: { id: contact.id },
+            select: { conversation_state: true },
+          })
+          const remembered = (latest?.conversation_state as any)?.memory
+            ?.sentMedia as
+            | Array<{ propertyId?: number; url?: string }>
+            | undefined
+          const sent = new Set(
+            (remembered || [])
+              .filter(item => item.propertyId === property.id)
+              .map(item => item.url)
+              .filter(Boolean),
           )
-          return `Sent one verified image for property ${property.id}. Do not repeat the URL or send another image unless the customer asks.`
+          const fresh = images.filter(url => !sent.has(url))
+          const requested = Math.max(1, Math.min(3, limit || 1))
+          const selected = (fresh.length ? fresh : images).slice(0, requested)
+          for (const [index, url] of selected.entries()) {
+            await this.contactService.sendMessage(
+              contact,
+              index === 0 && caption ? caption : property.title,
+              url,
+            )
+          }
+          await this.conversationStateService.recordPropertyMedia(
+            contact.id,
+            property,
+            selected,
+          )
+          return `Sent ${selected.length} verified image${selected.length === 1 ? '' : 's'} for ${property.title}. The customer has received the media; respond briefly without exposing a URL.`
         },
       }),
     }
@@ -909,7 +991,8 @@ export class AiToolsService {
     if (!value) return []
     try {
       const parsed = JSON.parse(value)
-      if (Array.isArray(parsed)) return parsed.filter(item => typeof item === 'string')
+      if (Array.isArray(parsed))
+        return parsed.filter(item => typeof item === 'string')
     } catch {
       // Older records use comma or newline separated URLs.
     }

@@ -254,23 +254,25 @@ model assistant_instructions {
 }
 
 model company_assets {
-  id           Int       @id @default(autoincrement())
-  company_id   Int
-  file_url     String
-  file_type    String    @db.VarChar(20)
-  file_name    String    @db.VarChar(255)
-  description  String?
-  mime_type    String?   @db.VarChar(120)
-  source       String    @default("company-upload") @db.VarChar(30)
-  source_ref   String?   @db.VarChar(120)
-  content_hash String?   @db.VarChar(64)
-  ai_summary   String?
-  ai_tags      String?
-  indexed_at   DateTime? @db.Timestamptz(6)
-  last_used_at DateTime? @db.Timestamptz(6)
-  use_count    Int       @default(0)
-  created_at   DateTime  @default(now()) @db.Timestamptz(6)
-  company      companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  id                       Int       @id @default(autoincrement())
+  company_id               Int
+  file_url                 String
+  file_type                String    @db.VarChar(20)
+  file_name                String    @db.VarChar(255)
+  description              String?
+  mime_type                String?   @db.VarChar(120)
+  source                   String    @default("company-upload") @db.VarChar(30)
+  source_ref               String?   @db.VarChar(120)
+  content_hash             String?   @db.VarChar(64)
+  ai_summary               String?
+  ai_tags                  String?
+  indexed_at               DateTime? @db.Timestamptz(6)
+  property_extracted_at    DateTime? @db.Timestamptz(6)
+  extracted_property_count Int       @default(0)
+  last_used_at             DateTime? @db.Timestamptz(6)
+  use_count                Int       @default(0)
+  created_at               DateTime  @default(now()) @db.Timestamptz(6)
+  company                  companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
 
   @@unique([company_id, file_url])
   @@index([company_id])
@@ -334,31 +336,35 @@ model pool {
 }
 
 model properties {
-  id             Int             @id @default(autoincrement())
-  company_id     Int
-  title          String          @db.VarChar(200)
-  description    String?
-  property_type  String?         @db.VarChar(50)
-  location       String?         @db.VarChar(120)
-  state          String?         @db.VarChar(60)
-  price          BigInt?
-  price_max      BigInt?
-  currency       String?         @default("NGN") @db.VarChar(8)
-  size_sqm       Int?
-  bedrooms       Int?
-  bathrooms      Int?
-  title_document String?         @db.VarChar(60)
-  payment_plan   String?
-  features       String?
-  image_urls     String?
-  video_url      String?
-  status         String          @default("available") @db.VarChar(20)
-  created_at     DateTime        @default(now()) @db.Timestamptz(6)
-  updated_at     DateTime?       @updatedAt @db.Timestamptz(6)
-  company        companies       @relation(fields: [company_id], references: [id], onDelete: Cascade)
-  content_posts  content_posts[]
+  id                 Int             @id @default(autoincrement())
+  company_id         Int
+  title              String          @db.VarChar(200)
+  description        String?
+  property_type      String?         @db.VarChar(50)
+  location           String?         @db.VarChar(120)
+  state              String?         @db.VarChar(60)
+  price              BigInt?
+  price_max          BigInt?
+  currency           String?         @default("NGN") @db.VarChar(8)
+  size_sqm           Int?
+  bedrooms           Int?
+  bathrooms          Int?
+  title_document     String?         @db.VarChar(60)
+  payment_plan       String?
+  features           String?
+  image_urls         String?
+  video_url          String?
+  status             String          @default("available") @db.VarChar(20)
+  source_asset_id    Int?
+  source_fingerprint String?         @db.VarChar(64)
+  created_at         DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?       @updatedAt @db.Timestamptz(6)
+  company            companies       @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  content_posts      content_posts[]
 
+  @@unique([company_id, source_asset_id, source_fingerprint])
   @@index([company_id, status])
+  @@index([company_id, source_asset_id])
 }
 
 model content_posts {

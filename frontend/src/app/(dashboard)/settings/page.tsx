@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Switch } from '@/components/ui/switch'
 import { getErrorMessage } from '@/lib/error'
 import { API_BASE_URL } from '@/lib/api-base'
+import { uploadMedia } from '@/lib/media-client'
 
 type CompanyAsset = {
   id: number
@@ -175,11 +176,31 @@ export default function SettingsPage() {
         formData.append('description', assetDescription.trim())
       }
 
-      const res = await api.post(`/companies/${companyId}/assets/upload`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-
-      setAssets(prev => [res.data, ...prev])
+      const isPdf =
+        selectedFile.type === 'application/pdf' ||
+        selectedFile.name.toLowerCase().endsWith('.pdf')
+      if (isPdf) {
+        const uploaded = await uploadMedia(selectedFile)
+        let refreshed = await api.get(`/companies/${companyId}/assets`)
+        const registered = Array.isArray(refreshed.data)
+          ? refreshed.data.find(
+              (asset: CompanyAsset) => asset.file_url === uploaded.url,
+            )
+          : null
+        if (registered && assetDescription.trim()) {
+          await api.put(
+            `/companies/${companyId}/assets/${registered.id}`,
+            { description: assetDescription.trim() },
+          )
+          refreshed = await api.get(`/companies/${companyId}/assets`)
+        }
+        setAssets(Array.isArray(refreshed.data) ? refreshed.data : [])
+      } else {
+        const res = await api.post(`/companies/${companyId}/assets/upload`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        setAssets(prev => [res.data, ...prev])
+      }
       setAssetDescription('')
       setSelectedFile(null)
     } catch { /* silent */ }

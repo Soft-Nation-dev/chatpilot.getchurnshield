@@ -323,6 +323,36 @@ export class AiRoutingService {
         ? serialized
         : 'I’ve saved your cancellation request. Our team will confirm it shortly.'
     }
+    if (last.name === 'send_property_media') {
+      return /^Sent\s+\d+\s+verified image/i.test(serialized)
+        ? 'I’ve sent the property pictures. Let me know which detail you would like me to clarify.'
+        : null
+    }
+    if (last.name === 'search_inventory') {
+      try {
+        const parsed = JSON.parse(serialized)
+        const matches = Array.isArray(parsed?.matches)
+          ? parsed.matches.slice(0, 3)
+          : []
+        if (!matches.length) {
+          return 'I couldn’t find a verified available property matching that request. I can flag it for the team to confirm.'
+        }
+        const lines = matches.map((property: any) => {
+          const details = [
+            property.propertyType,
+            property.bedrooms ? `${property.bedrooms} bedrooms` : null,
+            [property.location, property.state].filter(Boolean).join(', '),
+            property.price
+              ? `${property.currency || 'NGN'} ${Number(property.price).toLocaleString('en-NG')}`
+              : null,
+          ].filter(Boolean)
+          return `• ${property.title}${details.length ? ` — ${details.join(' · ')}` : ''}`
+        })
+        return `Here are the verified matches I found:\n${lines.join('\n')}`
+      } catch {
+        return null
+      }
+    }
     if (last.name !== 'get_available_slots') return null
 
     try {

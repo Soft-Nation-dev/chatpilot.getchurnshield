@@ -1,5 +1,19 @@
 # Hostinger production deployment
 
+## One-command production deployment
+
+From the repository root, run:
+
+```powershell
+npm run deploy
+```
+
+The command refuses tracked uncommitted changes, runs the complete backend
+test/build and frontend build, pushes the release commit, verifies the pinned
+VPS host key, deploys and migrates the Hostinger API without restarting the
+WhatsApp container, deploys the OpenNext frontend and R2 media routes to
+Cloudflare, then checks both public production URLs.
+
 ## Current production access and layout
 
 Use this section for future deployments so the server does not need to be
