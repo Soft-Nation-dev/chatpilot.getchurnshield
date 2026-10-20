@@ -8,6 +8,19 @@ $deployKey = 'C:\Users\HP\.ssh\chatpilot-kvm1-deploy'
 $expectedFingerprint = 'SHA256:EZbYjvOX7av3mN2h1xt4YBSA+zUXGBGnt6d2oU22Iqc'
 $knownHosts = Join-Path $repoRoot 'tmp\deploy_known_hosts'
 
+# Interactive Wrangler login is not available in this deployment workflow.
+# Prefer the process environment, then the current Windows user's protected
+# environment. The token is never stored in or printed by this repository.
+if (-not $env:CLOUDFLARE_API_TOKEN) {
+  $userCloudflareToken = [Environment]::GetEnvironmentVariable('CLOUDFLARE_API_TOKEN', 'User')
+  if ($userCloudflareToken) {
+    $env:CLOUDFLARE_API_TOKEN = $userCloudflareToken
+  }
+}
+if (-not $env:CLOUDFLARE_API_TOKEN) {
+  throw 'CLOUDFLARE_API_TOKEN is not configured for this Windows user.'
+}
+
 function Invoke-Checked {
   param(
     [Parameter(Mandatory = $true)][string]$FilePath,
