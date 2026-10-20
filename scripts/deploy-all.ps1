@@ -11,9 +11,9 @@ $knownHosts = Join-Path $repoRoot 'tmp\deploy_known_hosts'
 function Invoke-Checked {
   param(
     [Parameter(Mandatory = $true)][string]$FilePath,
-    [Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments
+    [Parameter(Mandatory = $true)][string[]]$ArgumentList
   )
-  & $FilePath @Arguments
+  & $FilePath @ArgumentList
   if ($LASTEXITCODE -ne 0) {
     throw "$FilePath failed with exit code $LASTEXITCODE"
   }
@@ -29,33 +29,31 @@ if ($trackedChanges) {
 }
 
 Write-Host 'Validating backend and frontend...'
-Invoke-Checked npm --prefix ChatPilot test -- --runInBand
-Invoke-Checked npm --prefix ChatPilot run build
-Invoke-Checked npm --prefix frontend run build
+Invoke-Checked -FilePath npm -ArgumentList @('--prefix', 'ChatPilot', 'test', '--', '--runInBand')
+Invoke-Checked -FilePath npm -ArgumentList @('--prefix', 'ChatPilot', 'run', 'build')
+Invoke-Checked -FilePath npm -ArgumentList @('--prefix', 'frontend', 'run', 'build')
 
 Write-Host 'Publishing the release commit...'
-Invoke-Checked git push origin HEAD:main
+Invoke-Checked -FilePath git -ArgumentList @('push', 'origin', 'HEAD:main')
 $sha = (git rev-parse --short HEAD).Trim()
 if (-not $sha) { throw 'Could not resolve the release commit.' }
 
 $archive = Join-Path $repoRoot "tmp\release-$sha.tar"
-# Quote the short option so PowerShell forwards it to Git instead of
-# interpreting `-o` as an abbreviated common parameter (`-OutVariable`).
-Invoke-Checked git archive --format=tar '-o' $archive $sha
+Invoke-Checked -FilePath git -ArgumentList @('archive', '--format=tar', '-o', $archive, $sha)
 
 if (-not (Test-Path -LiteralPath $deployKey)) {
   throw "Deployment key not found at $deployKey"
 }
 
 Write-Host 'Verifying the pinned production host...'
-Invoke-Checked ssh -i $deployKey -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$knownHosts" "$deployUser@$deployHost" true
+Invoke-Checked -FilePath ssh -ArgumentList @('-i', $deployKey, '-o', 'StrictHostKeyChecking=accept-new', '-o', "UserKnownHostsFile=$knownHosts", "$deployUser@$deployHost", 'true')
 $fingerprintOutput = (& ssh-keygen -lf $knownHosts) -join "`n"
 if ($LASTEXITCODE -ne 0 -or $fingerprintOutput -notmatch [regex]::Escape($expectedFingerprint)) {
   throw 'Production host fingerprint did not match the pinned fingerprint.'
 }
 
 Write-Host "Uploading backend release $sha..."
-Invoke-Checked scp -i $deployKey -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$knownHosts" $archive "${deployUser}@${deployHost}:/tmp/release-$sha.tar"
+Invoke-Checked -FilePath scp -ArgumentList @('-i', $deployKey, '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", $archive, "${deployUser}@${deployHost}:/tmp/release-$sha.tar")
 
 $remoteDeploy = @'
 set -e
@@ -91,10 +89,10 @@ docker inspect -f '{{.Name}} {{.State.Status}} {{.State.StartedAt}}' chatpilot w
 '@.Replace('__SHA__', $sha)
 
 Write-Host 'Deploying the Hostinger backend...'
-Invoke-Checked ssh -i $deployKey -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$knownHosts" "$deployUser@$deployHost" $remoteDeploy
+Invoke-Checked -FilePath ssh -ArgumentList @('-i', $deployKey, '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", "$deployUser@$deployHost", $remoteDeploy)
 
 Write-Host 'Deploying the Cloudflare frontend and R2-backed media routes...'
-Invoke-Checked npm --prefix frontend run deploy
+Invoke-Checked -FilePath npm -ArgumentList @('--prefix', 'frontend', 'run', 'deploy')
 
 $api = Invoke-WebRequest -Uri 'https://api.trygetchurnshield.com/api/v1/' -Method GET
 if ($api.StatusCode -ne 200) { throw 'Production API health check failed.' }
