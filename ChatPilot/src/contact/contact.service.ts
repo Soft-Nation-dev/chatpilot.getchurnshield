@@ -144,6 +144,26 @@ export class ContactService {
     return contact
   }
 
+  async hasOutboundReplyAfter(
+    contactId: number,
+    since: Date,
+    includeBot: boolean = true,
+  ): Promise<boolean> {
+    const reply = await this.prisma.messages.findFirst({
+      where: {
+        contact_id: contactId,
+        sent_at: { gt: since },
+        author_type: {
+          in: includeBot
+            ? [AUTHOR_TYPE.BOT, AUTHOR_TYPE.USER_WHATSAPP]
+            : [AUTHOR_TYPE.USER_WHATSAPP],
+        },
+      },
+      select: { id: true },
+    })
+    return Boolean(reply)
+  }
+
   async deleteContact(id: number) {
     return await this.prisma.contacts.delete({
       where: { id },

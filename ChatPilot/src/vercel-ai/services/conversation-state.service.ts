@@ -58,7 +58,7 @@ const FLOW_STATUS_QUERY =
 const ACKNOWLEDGEMENT =
   /^(?:yes|yeah|yep|ok(?:ay)?|alright|sure|thanks?|thank you|noted|perfect|great|that works)(?:[\s!.]|$)/i
 const PROPERTY_MEDIA_REQUEST =
-  /\b(?:send|show|share|see|view|resend)\b[\s\S]{0,45}\b(?:photo|photos|picture|pictures|image|images)\b|\b(?:photo|photos|picture|pictures|image|images)\b[\s\S]{0,45}\b(?:again|more|send|show|share|see|view)\b/i
+  /\b(?:send|show|share|see|view|resend|need|want|love|have|get)\b[\s\S]{0,55}\b(?:pic|pics|photo|photos|picture|pictures|image|images|media)\b|\b(?:pic|pics|photo|photos|picture|pictures|image|images|media)\b[\s\S]{0,45}\b(?:again|more|send|show|share|see|view|pls|please|kindly|now)\b|^(?:the\s+|some\s+)?(?:pic|pics|photo|photos|picture|pictures|image|images|media)(?:\s+(?:pls|please|kindly|again|now))?[?.!]*$/i
 
 @Injectable()
 export class ConversationStateService {
@@ -570,7 +570,7 @@ export class ConversationStateService {
         .filter(item => item.propertyId === property.id)
         .map(item => item.url),
     )
-    const plural = /\b(?:photos|pictures|images|more)\b/i.test(message)
+    const plural = /\b(?:pics|photos|pictures|images|media|more)\b/i.test(message)
     const limit = plural ? 3 : 1
     const unsent = images.filter(url => !alreadySent.has(url))
     const selected = (unsent.length ? unsent : images).slice(0, limit)

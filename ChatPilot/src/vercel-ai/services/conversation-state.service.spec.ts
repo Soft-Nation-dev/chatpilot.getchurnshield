@@ -275,6 +275,45 @@ describe('ConversationStateService', () => {
     expect(prisma.properties.findMany).not.toHaveBeenCalled()
   })
 
+  it.each([
+    'The pic pls',
+    'I need the pictures or media',
+    'I would love to see the property media',
+  ])('recognizes natural property-media shorthand: %s', async message => {
+    const state = {
+      version: 1,
+      memory: {
+        activePropertyId: 7,
+        activePropertyTitle: 'Demo Duplex',
+        sentMedia: [],
+        updatedAt: new Date().toISOString(),
+      },
+    }
+    prisma.properties.findFirst.mockResolvedValue({
+      id: 7,
+      title: 'Demo Duplex',
+      location: 'Lekki Phase 1',
+      image_urls: 'https://cdn.test/one.jpg,https://cdn.test/two.jpg',
+    })
+    prisma.contacts.findUnique.mockResolvedValue({ conversation_state: state })
+    prisma.contacts.update.mockResolvedValue({})
+
+    const result = await service.prepareTurn(
+      {
+        id: 22,
+        chat_state: 'QUALIFYING',
+        is_replies_activated: true,
+        conversation_state: state,
+        companies: { id: 3 },
+      } as any,
+      message,
+      [],
+    )
+
+    expect(result.deterministicReply).toContain('https://cdn.test/one.jpg')
+    expect(prisma.properties.findMany).not.toHaveBeenCalled()
+  })
+
   it('backfills active-property memory from the last image sent before this upgrade', async () => {
     prisma.messages.findFirst.mockResolvedValue({
       image_url: 'https://cdn.test/legacy.jpg',

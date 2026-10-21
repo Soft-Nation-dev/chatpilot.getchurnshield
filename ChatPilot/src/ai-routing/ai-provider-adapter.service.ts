@@ -59,11 +59,11 @@ export class AiProviderAdapterService {
   safeErrorReason(error: unknown): string {
     const value = error as Record<string, any> | null
     const raw = [
-      error instanceof Error ? error.message : null,
       value?.responseBody,
       value?.response?.data?.error?.message,
       value?.data?.error?.message,
       value?.cause?.message,
+      error instanceof Error ? error.message : null,
     ]
       .find(item => typeof item === 'string' && item.trim())
       ?.trim()
@@ -81,6 +81,11 @@ export class AiProviderAdapterService {
       baseURL,
       apiKey: process.env.CLOUDFLARE_API_TOKEN,
       headers,
+      // GPT-OSS may include `reasoning_content` on its assistant tool-call
+      // turn. Cloudflare rejects that field when the turn is submitted back
+      // with the tool result, so normalize it exactly as we already do for
+      // Groq's compatible endpoint.
+      fetch: this.compatibleFetch,
     })
 
     // Cloudflare's Responses endpoint currently accepts plain GPT-OSS turns

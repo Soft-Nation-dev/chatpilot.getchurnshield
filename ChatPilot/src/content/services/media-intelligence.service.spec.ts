@@ -83,4 +83,76 @@ describe('MediaIntelligenceService document extraction', () => {
       }),
     })
   })
+
+  it('uses extracted images for a scanned PDF instead of sending the raw PDF', async () => {
+    const extractedImage = {
+      file_url: 'https://cdn.test/scanned-page.jpg',
+      file_name: 'scanned-page.jpg',
+      mime_type: 'image/jpeg',
+      description: 'Page extracted from brochure',
+      ai_summary: null,
+      ai_tags: null,
+    }
+    const prisma = {
+      company_assets: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 19,
+          company_id: 6,
+          file_name: 'scanned-brochure.pdf',
+          file_url: 'https://cdn.test/scanned-brochure.pdf',
+          mime_type: 'application/pdf',
+          description: null,
+          property_extracted_at: null,
+        }),
+        findMany: jest.fn().mockResolvedValue([extractedImage]),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      properties: {
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({}),
+        update: jest.fn(),
+      },
+    } as any
+    const aiRouting = {
+      generate: jest.fn().mockResolvedValue({ text: '{"properties":[]}' }),
+    } as any
+    const notifications = { create: jest.fn() } as any
+    const service = new MediaIntelligenceService(
+      prisma,
+      aiRouting,
+      notifications,
+    )
+    jest.spyOn(service as any, 'extractPdfText').mockResolvedValue(null)
+
+    await service.indexDocument(19)
+
+    const request = aiRouting.generate.mock.calls[0][0]
+    const content = request.messages[0].content
+    expect(content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'file',
+          data: new URL(extractedImage.file_url),
+          mediaType: 'image/jpeg',
+        }),
+      ]),
+    )
+    expect(content).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ mediaType: 'application/pdf' }),
+      ]),
+    )
+  })
+
+  it('samples long PDF text across the document within the model budget', () => {
+    const service = new MediaIntelligenceService({} as any, {} as any, {} as any)
+    const text = `${'A'.repeat(10_000)}${'B'.repeat(10_000)}${'C'.repeat(10_000)}`
+
+    const sampled = (service as any).samplePdfText(text, 12_000)
+
+    expect(sampled.length).toBeLessThan(12_200)
+    expect(sampled).toContain('A')
+    expect(sampled).toContain('B')
+    expect(sampled).toContain('C')
+  })
 })

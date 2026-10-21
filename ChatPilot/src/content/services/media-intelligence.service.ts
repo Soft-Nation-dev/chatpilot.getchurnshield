@@ -320,11 +320,33 @@ export class MediaIntelligenceService {
     }
 
     const documentText = await this.extractPdfText(document.file_url)
+    const documentImages = documentText
+      ? []
+      : await this.prisma.company_assets.findMany({
+          where: {
+            company_id: document.company_id,
+            source: 'document-extract',
+            source_ref: String(document.id),
+            file_type: 'image',
+          },
+          orderBy: { created_at: 'asc' },
+          take: 4,
+        })
+
+    // Cloudflare Workers AI does not accept application/pdf file parts. For
+    // scanned brochures, use the page/embedded images extracted at upload
+    // time. If neither text nor images are available, finish cleanly instead
+    // of repeatedly sending an unsupported raw PDF every hour.
+    if (!documentText && !documentImages.length) {
+      await this.completeDocumentIndex(document, 0, notify)
+      return 0
+    }
+
     const result = await this.aiRouting.generate({
       workload: documentText ? AiWorkload.Content : AiWorkload.MediaIndex,
       companyId: document.company_id,
       system:
-        'Extract only explicitly stated real-estate listings from the supplied PDF. Never infer or invent a price, location, title document, availability, room count, or feature. Return strict JSON only: {"properties":[{"title":"","description":null,"property_type":null,"location":null,"state":null,"price":null,"price_max":null,"currency":"NGN","size_sqm":null,"bedrooms":null,"bathrooms":null,"title_document":null,"payment_plan":null,"features":null,"status":"available|reserved|sold|hidden"}]}. Use numeric naira values without commas. Omit brochures that contain no identifiable property listings by returning an empty properties array. Keep each description factual and under 600 characters.',
+        'Extract only explicitly stated real-estate listings from the supplied brochure text or images. Never infer or invent a price, location, title document, availability, room count, or feature. Return strict JSON only: {"properties":[{"title":"","description":null,"property_type":null,"location":null,"state":null,"price":null,"price_max":null,"currency":"NGN","size_sqm":null,"bedrooms":null,"bathrooms":null,"title_document":null,"payment_plan":null,"features":null,"status":"available|reserved|sold|hidden"}]}. Use numeric naira values without commas. Omit brochures that contain no identifiable property listings by returning an empty properties array. Keep each description factual and under 600 characters.',
       messages: documentText
         ? [
             {
@@ -343,13 +365,13 @@ export class MediaIntelligenceService {
               content: [
                 {
                   type: 'text',
-                  text: `Extract the distinct property listings in ${document.file_name}. Existing description: ${document.description || 'none'}`,
+                  text: `Extract the distinct property listings visible in these images from ${document.file_name}. Existing description: ${document.description || 'none'}`,
                 },
-                {
-                  type: 'file',
-                  data: new URL(document.file_url),
-                  mediaType: document.mime_type || 'application/pdf',
-                },
+                ...documentImages.map(asset => ({
+                  type: 'file' as const,
+                  data: new URL(asset.file_url),
+                  mediaType: asset.mime_type || 'image/jpeg',
+                })),
               ],
             },
           ],
@@ -358,6 +380,19 @@ export class MediaIntelligenceService {
     })
     const extracted = this.parseDocumentProperties(result.text)
     const saved = await this.saveDocumentProperties(document, extracted)
+    await this.completeDocumentIndex(document, saved, notify)
+    return saved
+  }
+
+  private async completeDocumentIndex(
+    document: {
+      id: number
+      company_id: number
+      file_name: string
+    },
+    saved: number,
+    notify: boolean,
+  ): Promise<void> {
     await this.prisma.company_assets.update({
       where: { id: document.id },
       data: {
@@ -379,7 +414,6 @@ export class MediaIntelligenceService {
         entity: 'property',
       })
     }
-    return saved
   }
 
   private async saveDocumentProperties(
@@ -599,11 +633,23 @@ export class MediaIntelligenceService {
         .replace(/[ \t]+/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
         .trim()
-      return text.length >= 40 ? text.slice(0, 40_000) : null
+      if (text.length < 40) return null
+      return this.samplePdfText(text, 12_000)
     } catch (error) {
       this.logger.warn(`Local PDF text extraction failed: ${error?.message}`)
       return null
     }
+  }
+
+  private samplePdfText(text: string, limit: number): string {
+    if (text.length <= limit) return text
+    const sampleSize = Math.floor(limit / 3)
+    const middleStart = Math.max(0, Math.floor(text.length / 2 - sampleSize / 2))
+    return [
+      text.slice(0, sampleSize),
+      text.slice(middleStart, middleStart + sampleSize),
+      text.slice(-sampleSize),
+    ].join('\n\n[document section omitted]\n\n')
   }
 
   private propertyStatus(value?: string | null): string {

@@ -55,7 +55,7 @@ export class AiRoutingService {
       try {
         const model = this.providers.createModel(candidate)
         const tools = executedTools.length
-          ? undefined
+          ? this.toolsForProviderRetry(options.tools, executedTools)
           : this.trackToolExecutions(options.tools, executedTools)
         const completedActions = executedTools.length
           ? `\n\nActions already completed during this turn. Do not repeat them or call more tools. Respond naturally using these results:\n${executedTools
@@ -300,6 +300,28 @@ export class AiRoutingService {
     ) as ToolSet
   }
 
+  private toolsForProviderRetry(
+    tools: ToolSet | undefined,
+    executions: ToolExecution[],
+  ): ToolSet | undefined {
+    if (!tools || !executions.length) return undefined
+
+    // An inventory search is read-only. If one provider fails after searching,
+    // the next provider may use that verified result to send its media. Never
+    // expose mutation tools after a side effect has already run, which avoids
+    // duplicate bookings, messages, or state changes during failover.
+    if (
+      executions.every(execution => execution.name === 'search_inventory') &&
+      tools.send_property_media
+    ) {
+      return this.trackToolExecutions(
+        { send_property_media: tools.send_property_media } as ToolSet,
+        executions,
+      )
+    }
+    return undefined
+  }
+
   private customerReplyFromToolResults(
     executions: ToolExecution[],
   ): string | null {
@@ -328,31 +350,10 @@ export class AiRoutingService {
         ? 'I’ve sent the property pictures. Let me know which detail you would like me to clarify.'
         : null
     }
-    if (last.name === 'search_inventory') {
-      try {
-        const parsed = JSON.parse(serialized)
-        const matches = Array.isArray(parsed?.matches)
-          ? parsed.matches.slice(0, 3)
-          : []
-        if (!matches.length) {
-          return 'I couldn’t find a verified available property matching that request. I can flag it for the team to confirm.'
-        }
-        const lines = matches.map((property: any) => {
-          const details = [
-            property.propertyType,
-            property.bedrooms ? `${property.bedrooms} bedrooms` : null,
-            [property.location, property.state].filter(Boolean).join(', '),
-            property.price
-              ? `${property.currency || 'NGN'} ${Number(property.price).toLocaleString('en-NG')}`
-              : null,
-          ].filter(Boolean)
-          return `• ${property.title}${details.length ? ` — ${details.join(' · ')}` : ''}`
-        })
-        return `Here are the verified matches I found:\n${lines.join('\n')}`
-      } catch {
-        return null
-      }
-    }
+    // search_inventory is read-only. A provider failure after a search must
+    // fail over to another model (which may call send_property_media), not emit
+    // a generic database summary that ignores the customer's actual request.
+    if (last.name === 'search_inventory') return null
     if (last.name !== 'get_available_slots') return null
 
     try {

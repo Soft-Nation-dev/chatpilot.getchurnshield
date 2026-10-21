@@ -16,7 +16,7 @@ describe('AiRoutingService tool recovery', () => {
     expect(reply).not.toMatch(/https?:|json|tool/i)
   })
 
-  it('turns a completed inventory search into a useful customer reply', () => {
+  it('does not turn a failed inventory-search turn into a generic reply', () => {
     const reply = (service as any).customerReplyFromToolResults([
       {
         name: 'search_inventory',
@@ -37,7 +37,20 @@ describe('AiRoutingService tool recovery', () => {
       },
     ])
 
-    expect(reply).toContain('Demo Duplex')
-    expect(reply).toContain('NGN 200,000,000')
+    expect(reply).toBeNull()
+  })
+
+  it('allows only media delivery after a read-only search during provider failover', () => {
+    const sendPropertyMedia = { execute: jest.fn() }
+    const retryTools = (service as any).toolsForProviderRetry(
+      {
+        search_inventory: { execute: jest.fn() },
+        send_property_media: sendPropertyMedia,
+        book_appointment: { execute: jest.fn() },
+      },
+      [{ name: 'search_inventory', result: '{"matches":[]}' }],
+    )
+
+    expect(Object.keys(retryTools)).toEqual(['send_property_media'])
   })
 })

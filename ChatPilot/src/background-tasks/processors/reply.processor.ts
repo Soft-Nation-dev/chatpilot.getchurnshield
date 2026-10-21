@@ -40,6 +40,33 @@ export class ReplyProcessor extends WorkerHost {
       }
     }
 
+    const latestInboundAt = contact.messages
+      .filter(
+        message =>
+          message.author_type === AUTHOR_TYPE.HUMAN && message.sent_at,
+      )
+      .reduce<Date | null>((latest, message) => {
+        const sentAt = message.sent_at as Date
+        return !latest || sentAt > latest ? sentAt : latest
+      }, null)
+
+    // A retry must never race a person who has already taken over, or repeat a
+    // response that a previous attempt partially delivered.
+    if (
+      job.attemptsMade > 0 &&
+      latestInboundAt &&
+      (await this.contactService.hasOutboundReplyAfter(
+        contact.id,
+        latestInboundAt,
+      ))
+    ) {
+      this.logger.log(
+        `Skipping retry for contact ${contact.id}: a newer outbound reply already exists`,
+      )
+      await this.contactService.markMessagesProcessed(contact)
+      return { superseded: true, reason: 'newer_outbound_reply' }
+    }
+
     const gate = await this.chatLifecycle.gate(contact.id, 'INBOUND_REPLY')
     const resetRequested = contact.messages.some(
       message =>
@@ -89,7 +116,6 @@ export class ReplyProcessor extends WorkerHost {
         this.logger.log(`combinedMessages: ${combinedMessages}`)
 
         let openAIMessage: string | null
-        let degradedReply = false
         try {
           openAIMessage =
             await this.messageProcessingService.processClientMessage(
@@ -103,29 +129,26 @@ export class ReplyProcessor extends WorkerHost {
             `All AI providers failed for contact ${contact.id}`,
             error instanceof Error ? error.stack : String(error),
           )
-          const latestContact = await this.contactService.getContactById(
-            contact.id,
-          )
-          openAIMessage = buildDegradedReply(
-            latestContact || (contact as Contact),
-            combinedMessages,
-          )
-          degradedReply = true
-          await this.contactService.updateContact(contact.id, {
-            needs_review: true,
-          })
-          const hour = new Date().toISOString().slice(0, 13)
-          await this.notifications.create({
-            companyId: company.id,
-            type: 'chat_handoff',
-            severity: 'warning',
-            title: 'Conversation needs attention',
-            message:
-              'The AI providers could not complete a reliable reply, so a safe response was sent and this conversation was flagged for review.',
-            entity: 'chat',
-            entityId: contact.id,
-            dedupeKey: `chat-handoff:${contact.id}:${hour}`,
-          })
+          const maxAttempts = job.opts.attempts || 1
+          const finalAttempt = job.attemptsMade + 1 >= maxAttempts
+          if (finalAttempt) {
+            await this.contactService.updateContact(contact.id, {
+              needs_review: true,
+            })
+            const hour = new Date().toISOString().slice(0, 13)
+            await this.notifications.create({
+              companyId: company.id,
+              type: 'chat_handoff',
+              severity: 'warning',
+              title: 'Conversation needs a human reply',
+              message:
+                'The AI could not produce a reliable answer after all delayed retries. No generic reply was sent; please answer this customer from WhatsApp or the Chats dashboard.',
+              entity: 'chat',
+              entityId: contact.id,
+              dedupeKey: `chat-handoff:${contact.id}:${hour}`,
+            })
+          }
+          throw error
         }
 
         this.logger.log(`open AI Message ===> ${contact.phone} `, {
@@ -145,14 +168,7 @@ export class ReplyProcessor extends WorkerHost {
           this.logger.error(
             `Unsafe or empty AI reply blocked for contact ${contact.id}`,
           )
-          await this.contactService.updateContact(contact.id, {
-            needs_review: true,
-          })
-          await this.contactService.markMessagesProcessed(contact)
-          return {
-            messagesProcessed: contactMessagesList,
-            generatedReplies: replyMessages,
-          }
+          throw new Error('AI response failed the customer-output safety check')
         }
 
         // A calendar failure deliberately moves the conversation to human
@@ -169,6 +185,21 @@ export class ReplyProcessor extends WorkerHost {
             latestContact as Contact,
             combinedMessages,
           )
+        }
+
+        if (
+          latestInboundAt &&
+          (await this.contactService.hasOutboundReplyAfter(
+            contact.id,
+            latestInboundAt,
+            false,
+          ))
+        ) {
+          this.logger.log(
+            `Suppressing AI reply for contact ${contact.id}: a team member replied while it was being generated`,
+          )
+          await this.contactService.markMessagesProcessed(contact)
+          return { superseded: true, reason: 'human_replied_during_generation' }
         }
         const contentParts = this.WaFormattingService.splitMessage(safeReply)
 
@@ -207,7 +238,6 @@ export class ReplyProcessor extends WorkerHost {
               part,
               undefined,
               AUTHOR_TYPE.BOT,
-              degradedReply ? 'ai_fallback' : undefined,
             )
             replyMessages.push({ message: part })
           }
@@ -228,7 +258,7 @@ export class ReplyProcessor extends WorkerHost {
             latencyMs: Date.now() - started,
             details: {
               messagesSent: replyMessages.length,
-              degradedReply,
+              degradedReply: false,
             },
           })
         }
@@ -237,11 +267,13 @@ export class ReplyProcessor extends WorkerHost {
       }
     } catch (error) {
       if (contact.company_id) {
+        const maxAttempts = job.opts.attempts || 1
+        const finalAttempt = job.attemptsMade + 1 >= maxAttempts
         await this.chatLifecycle.recordAutomation({
           companyId: contact.company_id,
           contactId: contact.id,
           jobType: 'reply',
-          status: 'failed',
+          status: finalAttempt ? 'failed' : 'retrying',
           attempt: job.attemptsMade + 1,
           maxAttempts: job.opts.attempts || 1,
           jobId: String(job.id),

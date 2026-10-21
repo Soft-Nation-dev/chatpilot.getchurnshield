@@ -40,8 +40,11 @@ export class ReplyService {
       : stableJobId
     const task = await this.replyQueue.add(BackgroundQueue.REPLIES, taskData, {
       jobId,
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 2000 },
+      attempts: 4,
+      // Prefer a delayed intelligent answer over an immediate unrelated
+      // fallback. Retries occur after roughly 30s, 60s and 120s, and the
+      // processor suppresses them when a team member has already replied.
+      backoff: { type: 'exponential', delay: 30_000 },
       delay: debounceMs,
       removeOnComplete: true,
       removeOnFail: 200,
