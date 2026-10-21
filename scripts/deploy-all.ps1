@@ -107,11 +107,7 @@ Invoke-Checked -FilePath ssh -ArgumentList @('-i', $deployKey, '-o', 'StrictHost
 Write-Host 'Deploying the Cloudflare frontend and R2-backed media routes...'
 Invoke-Checked -FilePath npm -ArgumentList @('--prefix', 'frontend', 'run', 'deploy')
 
-$api = Invoke-WebRequest -Uri 'https://api.trygetchurnshield.com/api/v1/' -Method GET
-if ($api.StatusCode -ne 200) { throw 'Production API health check failed.' }
-$frontend = Invoke-WebRequest -Uri 'https://chatpilot.trygetchurnshield.com/' -Method GET
-if ($frontend.StatusCode -lt 200 -or $frontend.StatusCode -ge 400) {
-  throw 'Production frontend health check failed.'
-}
+Invoke-Checked -FilePath 'curl.exe' -ArgumentList @('--fail', '--silent', '--show-error', '--output', 'NUL', 'https://api.trygetchurnshield.com/api/v1/')
+Invoke-Checked -FilePath 'curl.exe' -ArgumentList @('--fail', '--silent', '--show-error', '--output', 'NUL', 'https://chatpilot.trygetchurnshield.com/')
 
 Write-Host "Deployment complete: $sha (Hostinger API + Cloudflare frontend)."
