@@ -5,8 +5,6 @@ import { AiGoogleService } from 'src/vercel-ai/services/ai-google.service'
 import { ConversationStateService } from './conversation-state.service'
 import { ChatLifecycleService } from 'src/contact/chat-lifecycle.service'
 
-const MAX_MESSAGES = 50
-
 @Injectable()
 export class UnifiedMessageProcessingService {
   private readonly logger = new Logger(UnifiedMessageProcessingService.name)
@@ -52,12 +50,11 @@ export class UnifiedMessageProcessingService {
       total_messages: { increment: 1 } as any,
     })
     this.logger.log(`updatedContact: ${updatedContact}`)
-    if (updatedContact.total_messages >= MAX_MESSAGES) {
-      if (updatedContact.total_messages === MAX_MESSAGES) {
-        return 'Hello! You have reached the maximum number of messages allowed. To start a new conversation, just type "reset".'
-      }
-      return null
-    }
+
+    // total_messages is an analytics counter, not a customer quota. Context is
+    // already bounded by getAiChatHistoryMultimodal and the compact persistent
+    // conversation state, so long-running chats must continue normally instead
+    // of leaking an internal limit/reset instruction to the customer.
 
     this.logger.log(`Routing AI request for company ${companyId}`)
 
