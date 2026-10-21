@@ -4,7 +4,10 @@ import {
   ProviderCandidate,
 } from './ai-routing.types'
 
-const CLOUDFLARE_CHAT = '@cf/openai/gpt-oss-20b'
+// GPT-OSS currently fails its second Chat Completions tool-result turn with
+// Cloudflare schema error 5006. Qwen 3.8 was verified end-to-end against the
+// production account and supports the same native tool workflow reliably.
+const CLOUDFLARE_CHAT = '@cf/qwen/qwen3.8-27b'
 const CLOUDFLARE_BACKGROUND = '@cf/qwen/qwen3-30b-a3b-fp8'
 const CLOUDFLARE_VISION = '@cf/qwen/qwen3.8-27b'
 const GROQ_CHAT = 'openai/gpt-oss-20b'
@@ -43,7 +46,7 @@ export function candidatesForWorkload(
 
   if (workload === AiWorkload.LiveChat) {
     return candidates([
-      ['cloudflare', CLOUDFLARE_CHAT, 12_000],
+      ['cloudflare', CLOUDFLARE_CHAT, 18_000],
       ['groq', GROQ_CHAT, 8_000],
       ['google', GEMINI, 15_000],
     ])

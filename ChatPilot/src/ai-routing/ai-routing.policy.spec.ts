@@ -8,9 +8,13 @@ import { AiWorkload } from './ai-routing.types'
 
 describe('AI routing policy', () => {
   it('uses Cloudflare then Groq then Gemini for live text chat', () => {
-    expect(
-      candidatesForWorkload(AiWorkload.LiveChat).map(item => item.provider),
-    ).toEqual(['cloudflare', 'groq', 'google'])
+    const candidates = candidatesForWorkload(AiWorkload.LiveChat)
+    expect(candidates.map(item => item.provider)).toEqual([
+      'cloudflare',
+      'groq',
+      'google',
+    ])
+    expect(candidates[0].model).toBe('@cf/qwen/qwen3.8-27b')
   })
 
   it('reserves Gemini as the first multimodal provider', () => {
