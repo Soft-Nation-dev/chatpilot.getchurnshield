@@ -2,11 +2,12 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$deployHost = '179.198.209.152'
+$deployHost = '187.77.182.157'
 $deployUser = 'root'
 $deployKey = 'C:\Users\HP\.ssh\chatpilot-kvm1-deploy'
-$expectedFingerprint = 'SHA256:EZbYjvOX7av3mN2h1xt4YBSA+zUXGBGnt6d2oU22Iqc'
+$expectedFingerprint = 'SHA256:TXtaqzdXJnJivSL5vjjVHk/NHr3dVwHyTKzL9lSoiKM'
 $knownHosts = Join-Path $repoRoot 'tmp\deploy_known_hosts'
+$sshKexOption = 'KexAlgorithms=curve25519-sha256'
 
 # Interactive Wrangler login is not available in this deployment workflow.
 # Prefer the process environment, then the current Windows user's protected
@@ -59,14 +60,14 @@ if (-not (Test-Path -LiteralPath $deployKey)) {
 }
 
 Write-Host 'Verifying the pinned production host...'
-Invoke-Checked -FilePath ssh -ArgumentList @('-i', $deployKey, '-o', 'StrictHostKeyChecking=accept-new', '-o', "UserKnownHostsFile=$knownHosts", "$deployUser@$deployHost", 'true')
+Invoke-Checked -FilePath ssh -ArgumentList @('-i', $deployKey, '-o', $sshKexOption, '-o', 'StrictHostKeyChecking=accept-new', '-o', "UserKnownHostsFile=$knownHosts", "$deployUser@$deployHost", 'true')
 $fingerprintOutput = (& ssh-keygen -lf $knownHosts) -join "`n"
 if ($LASTEXITCODE -ne 0 -or $fingerprintOutput -notmatch [regex]::Escape($expectedFingerprint)) {
   throw 'Production host fingerprint did not match the pinned fingerprint.'
 }
 
 Write-Host "Uploading backend release $sha..."
-Invoke-Checked -FilePath scp -ArgumentList @('-i', $deployKey, '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", $archive, "${deployUser}@${deployHost}:/tmp/release-$sha.tar")
+Invoke-Checked -FilePath scp -ArgumentList @('-i', $deployKey, '-o', $sshKexOption, '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", $archive, "${deployUser}@${deployHost}:/tmp/release-$sha.tar")
 
 $remoteDeploy = @'
 set -e
@@ -79,8 +80,21 @@ if [ ! -d "$RELEASE" ]; then
 fi
 cd "$RELEASE/infra/hostinger"
 docker compose -p deployment --env-file .env config --quiet
-docker compose -p deployment --env-file .env build chatpilot
+docker compose -p deployment --env-file .env build chatpilot whatsapp-bot
 docker compose -p deployment --env-file .env run --rm --no-deps chatpilot npx prisma migrate deploy
+docker compose -p deployment --env-file .env up -d --no-deps whatsapp-bot
+bot_healthy=0
+for attempt in $(seq 1 30); do
+  if docker exec whatsapp-bot wget -q -O /dev/null http://127.0.0.1:3001/api/v1/whatsapp/sessions; then
+    bot_healthy=1
+    break
+  fi
+  sleep 2
+done
+if [ "$bot_healthy" -ne 1 ]; then
+  docker logs --tail=150 whatsapp-bot
+  exit 1
+fi
 docker compose -p deployment --env-file .env up -d --no-deps chatpilot
 healthy=0
 for attempt in $(seq 1 20); do
@@ -102,7 +116,7 @@ docker inspect -f '{{.Name}} {{.State.Status}} {{.State.StartedAt}}' chatpilot w
 '@.Replace('__SHA__', $sha)
 
 Write-Host 'Deploying the Hostinger backend...'
-Invoke-Checked -FilePath ssh -ArgumentList @('-i', $deployKey, '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", "$deployUser@$deployHost", $remoteDeploy)
+Invoke-Checked -FilePath ssh -ArgumentList @('-i', $deployKey, '-o', $sshKexOption, '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", "$deployUser@$deployHost", $remoteDeploy)
 
 Write-Host 'Deploying the Cloudflare frontend and R2-backed media routes...'
 Invoke-Checked -FilePath npm -ArgumentList @('--prefix', 'frontend', 'run', 'deploy')

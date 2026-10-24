@@ -10,8 +10,8 @@ npm run deploy
 
 The command refuses tracked uncommitted changes, runs the complete backend
 test/build and frontend build, pushes the release commit, verifies the pinned
-VPS host key, deploys and migrates the Hostinger API without restarting the
-WhatsApp container, deploys the OpenNext frontend and R2 media routes to
+VPS host key, deploys and migrates both the Hostinger API and WhatsApp
+gateway, deploys the OpenNext frontend and R2 media routes to
 Cloudflare, then checks both public production URLs.
 
 ## Current production access and layout
@@ -19,22 +19,22 @@ Cloudflare, then checks both public production URLs.
 Use this section for future deployments so the server does not need to be
 rediscovered each time.
 
-- VPS hostname: `srv2001947.hstgr.cloud` (`179.198.209.152`)
-- Hostinger plan/image: KVM 1, Ubuntu 24.04 with Docker
+- VPS hostname: `srv2094017.hstgr.cloud` (`187.77.182.157`)
+- Hostinger image: Ubuntu 24.04 with Docker
 - SSH user: `root`
-- Host key fingerprint: `SHA256:EZbYjvOX7av3mN2h1xt4YBSA+zUXGBGnt6d2oU22Iqc`
-- Hostinger SSH-key label: `chatpilot-kvm1-deploy`
+- Host key fingerprint: `SHA256:TXtaqzdXJnJivSL5vjjVHk/NHr3dVwHyTKzL9lSoiKM`
+- Hostinger SSH-key label: `GetChurnShield deployment`
 - Local private-key path on the deployment PC:
   `C:\Users\HP\.ssh\chatpilot-kvm1-deploy`
 - Active release symlink: `/opt/churnshield/current`
 - Immutable releases: `/opt/churnshield/releases/<short-git-sha>`
-- Shared infrastructure Compose directory: `/opt/churnshield/deployment`
-- Memory safety: a persistent 4 GB swap file is enabled at `/swapfile`
+- Compose directory: `/opt/churnshield/current/infra/hostinger`
 
-The previous KVM 2 host, `srv1926036.hstgr.cloud` (`185.230.64.44`), is a
-temporary rollback source only. Do not deploy new releases to it. Keep it
-online until the KVM 1 migration has been observed in production and the owner
-explicitly approves retirement.
+The previous production host, `srv2001947.hstgr.cloud` (`179.198.209.152`), is
+a rollback source only. Its application and WhatsApp containers must remain
+stopped so there is only one active gateway. Keep it available until this
+migration has been observed in production and the owner explicitly approves
+retirement.
 
 The SSH private key and API-provider credentials must never be copied into this
 repository. Keep `chatpilot-kvm1-deploy` installed until it is replaced
@@ -61,8 +61,9 @@ Production is release-based rather than a Git checkout. For backend changes:
 
 ```bash
 docker compose -p deployment --env-file .env config --quiet
-docker compose -p deployment --env-file .env build chatpilot
+docker compose -p deployment --env-file .env build chatpilot whatsapp-bot
 docker compose -p deployment --env-file .env run --rm --no-deps chatpilot npx prisma migrate deploy
+docker compose -p deployment --env-file .env up -d --no-deps whatsapp-bot
 docker compose -p deployment --env-file .env up -d --no-deps chatpilot
 ```
 
@@ -79,8 +80,7 @@ ln -sfn /opt/churnshield/releases/<short-git-sha> /opt/churnshield/current.next
 mv -Tf /opt/churnshield/current.next /opt/churnshield/current
 ```
 
-8. Confirm the public API and private WhatsApp gateway. The WhatsApp container
-   should retain its earlier start time when only `chatpilot` was changed:
+8. Confirm the public API and private WhatsApp gateway:
 
 ```bash
 curl -fsS -o /dev/null https://api.trygetchurnshield.com/api/v1/
@@ -93,11 +93,10 @@ Commit `44c5c69` was deployed successfully with this process on 21 September
 2026. It added the Cloudflare Workers AI → Groq → Gemini routing and the
 `20260921033000_add_ai_usage_events` migration.
 
-Commit `d6236ae` was migrated to KVM 1 on 23 September 2026. PostgreSQL, Redis,
-the uploads volume, and WhatsApp session data were restored from the verified
-KVM 2 backup. The public API DNS record now points to `179.198.209.152`; it
-remains DNS-only with a two-minute TTL. Caddy obtained a fresh Let's Encrypt
-certificate after the cutover.
+Production was migrated to `srv2094017.hstgr.cloud` on 25 October 2026.
+PostgreSQL, Redis, the uploads volume, and WhatsApp session data were restored
+from a verified backup and final live-data delta. The public API DNS record now
+points to `187.77.182.157`; it remains DNS-only with a two-minute TTL.
 
 The production `CLOUDFLARE_API_TOKEN` is intentionally scoped for Workers AI
 and cannot edit DNS records. Use the Cloudflare dashboard for DNS changes, or
