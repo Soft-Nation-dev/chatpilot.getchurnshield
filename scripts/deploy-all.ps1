@@ -43,9 +43,9 @@ if ($trackedChanges) {
 }
 
 Write-Host 'Validating backend and frontend...'
-Invoke-Checked -FilePath npm -ArgumentList @('--prefix', 'ChatPilot', 'test', '--', '--runInBand')
-Invoke-Checked -FilePath npm -ArgumentList @('--prefix', 'ChatPilot', 'run', 'build')
-Invoke-Checked -FilePath npm -ArgumentList @('--prefix', 'frontend', 'run', 'build')
+Invoke-Checked -FilePath npm.cmd -ArgumentList @('--prefix', 'ChatPilot', 'test', '--', '--runInBand')
+Invoke-Checked -FilePath npm.cmd -ArgumentList @('--prefix', 'ChatPilot', 'run', 'build')
+Invoke-Checked -FilePath npm.cmd -ArgumentList @('--prefix', 'frontend', 'run', 'build')
 
 Write-Host 'Publishing the release commit...'
 Invoke-Checked -FilePath git -ArgumentList @('push', 'origin', 'HEAD:main')
@@ -119,7 +119,7 @@ Write-Host 'Deploying the Hostinger backend...'
 Invoke-Checked -FilePath ssh -ArgumentList @('-i', $deployKey, '-o', $sshKexOption, '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", "$deployUser@$deployHost", $remoteDeploy)
 
 Write-Host 'Deploying the Cloudflare frontend and R2-backed media routes...'
-Invoke-Checked -FilePath npm -ArgumentList @('--prefix', 'frontend', 'run', 'deploy')
+Invoke-Checked -FilePath npm.cmd -ArgumentList @('--prefix', 'frontend', 'run', 'deploy')
 
 Invoke-Checked -FilePath 'curl.exe' -ArgumentList @('--fail', '--silent', '--show-error', '--output', 'NUL', 'https://api.trygetchurnshield.com/api/v1/')
 Invoke-Checked -FilePath 'curl.exe' -ArgumentList @('--fail', '--silent', '--show-error', '--output', 'NUL', 'https://chatpilot.trygetchurnshield.com/')
