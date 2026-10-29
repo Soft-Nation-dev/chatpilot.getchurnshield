@@ -25,6 +25,7 @@ describe('MediaIntelligenceService document extraction', () => {
         update: jest.fn().mockResolvedValue({}),
       },
       properties: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         findMany: jest.fn().mockResolvedValue([]),
         create: jest
           .fn()
@@ -109,6 +110,7 @@ describe('MediaIntelligenceService document extraction', () => {
         update: jest.fn().mockResolvedValue({}),
       },
       properties: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({}),
         update: jest.fn(),
@@ -146,7 +148,11 @@ describe('MediaIntelligenceService document extraction', () => {
   })
 
   it('samples long PDF text across the document within the model budget', () => {
-    const service = new MediaIntelligenceService({} as any, {} as any, {} as any)
+    const service = new MediaIntelligenceService(
+      {} as any,
+      {} as any,
+      {} as any,
+    )
     const text = `${'A'.repeat(10_000)}${'B'.repeat(10_000)}${'C'.repeat(10_000)}`
 
     const sampled = (service as any).samplePdfText(text, 12_000)
@@ -158,7 +164,11 @@ describe('MediaIntelligenceService document extraction', () => {
   })
 
   it('maps each listing only to the explicit PDF image selected by the model', () => {
-    const service = new MediaIntelligenceService({} as any, {} as any, {} as any)
+    const service = new MediaIntelligenceService(
+      {} as any,
+      {} as any,
+      {} as any,
+    )
     const children = [
       { file_url: 'https://cdn.test/one.jpg', file_name: 'one.jpg' },
       { file_url: 'https://cdn.test/two.jpg', file_name: 'two.jpg' },
@@ -180,7 +190,11 @@ describe('MediaIntelligenceService document extraction', () => {
   })
 
   it('does not deduplicate generic titles without corroborating facts', () => {
-    const service = new MediaIntelligenceService({} as any, {} as any, {} as any)
+    const service = new MediaIntelligenceService(
+      {} as any,
+      {} as any,
+      {} as any,
+    )
 
     expect(
       (service as any).isDuplicateProperty(

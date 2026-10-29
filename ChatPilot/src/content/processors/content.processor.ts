@@ -5,6 +5,7 @@ import { BackgroundQueue } from 'src/utils/constants/background.constants'
 import { ContentPublisherService } from '../services/content-publisher.service'
 import { ContentAutomationService } from '../services/content-automation.service'
 import { MediaIntelligenceService } from '../services/media-intelligence.service'
+import { CompanyService } from 'src/company/company.service'
 
 @Processor(BackgroundQueue.CONTENT, { concurrency: 1 })
 export class ContentProcessor extends WorkerHost {
@@ -14,12 +15,17 @@ export class ContentProcessor extends WorkerHost {
     private readonly publisher: ContentPublisherService,
     private readonly automation: ContentAutomationService,
     private readonly media: MediaIntelligenceService,
+    private readonly company: CompanyService,
   ) {
     super()
   }
 
   async process(job: Job): Promise<any> {
     if (job.name === 'index-document' && job.data?.assetId) {
+      await this.company.ensurePdfPageImages(
+        Number(job.data.assetId),
+        job.data?.companyId ? Number(job.data.companyId) : undefined,
+      )
       const extracted = await this.media.indexDocument(Number(job.data.assetId))
       return { assetId: job.data.assetId, extracted }
     }

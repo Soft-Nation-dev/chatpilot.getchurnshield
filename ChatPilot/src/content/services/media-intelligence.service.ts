@@ -50,7 +50,11 @@ export class MediaIntelligenceService {
     input: { kind: string; topic?: string | null; property?: any },
   ): Promise<{ url: string; assetId: number | null; source: string } | null> {
     const assets = await this.prisma.company_assets.findMany({
-      where: { company_id: companyId, file_type: 'image' },
+      where: {
+        company_id: companyId,
+        file_type: 'image',
+        source: { not: 'document-legacy' },
+      },
       orderBy: [{ use_count: 'asc' }, { created_at: 'desc' }],
     })
     const properties = input.property
@@ -347,7 +351,7 @@ export class MediaIntelligenceService {
         file_type: 'image',
       },
       orderBy: { created_at: 'asc' },
-      take: 8,
+      take: 20,
     })
 
     // Cloudflare Workers AI does not accept application/pdf file parts. For
@@ -359,39 +363,84 @@ export class MediaIntelligenceService {
       return 0
     }
 
-    const result = await this.aiRouting.generate({
-      workload: documentImages.length
-        ? AiWorkload.MediaIndex
-        : AiWorkload.Content,
-      companyId: document.company_id,
-      system:
-        'Extract only explicitly stated real-estate listings from the supplied brochure text and numbered images. Never infer or invent a price, location, title document, availability, room count, feature, or image relationship. Return strict JSON only: {"properties":[{"title":"","description":null,"property_type":null,"location":null,"state":null,"price":null,"price_max":null,"currency":"NGN","size_sqm":null,"bedrooms":null,"bathrooms":null,"title_document":null,"payment_plan":null,"features":null,"status":"available|reserved|sold|hidden","image_indices":[1]}]}. image_indices must contain only the 1-based numbers of images that visibly belong to that exact listing. Do not assign logos, generic covers, maps, or another listing\'s picture. Leave image_indices empty when uncertain. Use numeric naira values without commas. Omit brochures that contain no identifiable property listings by returning an empty properties array. Keep each description factual and under 600 characters.',
-      messages: [
-        {
-          role: 'user',
-          content: [
+    const extracted: ExtractedProperty[] = []
+    if (documentImages.length) {
+      // Small page batches avoid provider timeouts and, unlike raw PDF object
+      // order, retain the exact page/property relationship.
+      for (let offset = 0; offset < documentImages.length; offset += 2) {
+        const batch = documentImages.slice(offset, offset + 2)
+        const result = await this.aiRouting.generate({
+          workload: AiWorkload.MediaIndex,
+          companyId: document.company_id,
+          system: this.propertyExtractionPrompt(),
+          messages: [
             {
-              type: 'text',
-              text: `Extract the distinct property listings in ${document.file_name}. Existing description: ${document.description || 'none'}${documentText ? `\n\nPDF text:\n${documentText}` : ''}\n\n${documentImages.length ? `There are ${documentImages.length} numbered extracted images below. Map each listing only to its own images.` : 'No extracted images are available.'}`,
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Extract only the distinct property listings visible on these ${batch.length} rendered brochure page(s) from ${document.file_name}. The image numbers below are local to this batch. A page screenshot may be used as the listing image only when it visibly contains that listing and its property photograph.`,
+                },
+                ...batch.flatMap((asset, index) => [
+                  {
+                    type: 'text' as const,
+                    text: `Image ${index + 1}: ${asset.file_name}`,
+                  },
+                  {
+                    type: 'file' as const,
+                    data: new URL(asset.file_url),
+                    mediaType: asset.mime_type || 'image/jpeg',
+                  },
+                ]),
+              ],
             },
-            ...documentImages.flatMap((asset, index) => [
-              {
-                type: 'text' as const,
-                text: `Image ${index + 1}: ${asset.file_name}`,
-              },
-              {
-                type: 'file' as const,
-                data: new URL(asset.file_url),
-                mediaType: asset.mime_type || 'image/jpeg',
-              },
-            ]),
           ],
-        },
-      ],
-      maxOutputTokens: 2200,
-      temperature: 0.1,
-    })
-    const extracted = this.parseDocumentProperties(result.text)
+          maxOutputTokens: 1400,
+          temperature: 0.1,
+        })
+        const parsed = this.parseDocumentProperties(result.text)
+        if (parsed === null) {
+          this.logger.warn(
+            `Invalid property JSON for PDF ${document.id} from ${result.provider}/${result.model} (${result.text.length} chars)`,
+          )
+          throw new Error(
+            `Property extraction returned invalid JSON for PDF ${document.id}`,
+          )
+        }
+        extracted.push(
+          ...parsed.map(property => ({
+            ...property,
+            image_indices: Array.isArray(property.image_indices)
+              ? property.image_indices.map(index => Number(index) + offset)
+              : [],
+          })),
+        )
+      }
+    } else if (documentText) {
+      const chunks = this.pdfTextChunks(documentText)
+      for (const [index, chunk] of chunks.entries()) {
+        const result = await this.aiRouting.generate({
+          workload: AiWorkload.Content,
+          companyId: document.company_id,
+          system: this.propertyExtractionPrompt(),
+          prompt: `Extract the distinct property listings from text section ${index + 1} of ${chunks.length} in ${document.file_name}. No listing images are available for this section, so image_indices must be empty.\n\n${chunk}`,
+          maxOutputTokens: 1400,
+          temperature: 0.1,
+        })
+        const parsed = this.parseDocumentProperties(result.text)
+        if (parsed === null) {
+          this.logger.warn(
+            `Invalid property JSON for PDF ${document.id} from ${result.provider}/${result.model} (${result.text.length} chars)`,
+          )
+          throw new Error(
+            `Property extraction returned invalid JSON for PDF ${document.id}`,
+          )
+        }
+        extracted.push(
+          ...parsed.map(property => ({ ...property, image_indices: [] })),
+        )
+      }
+    }
     const saved = await this.saveDocumentProperties(document, extracted)
     await this.reconcileCompanyProperties(document.company_id)
     await this.completeDocumentIndex(document, saved, notify)
@@ -437,8 +486,21 @@ export class MediaIntelligenceService {
     },
     extracted: ExtractedProperty[],
   ): Promise<number> {
+    // A successful extraction replaces only mappings derived from this PDF.
+    // This clears historic bad pairings while leaving manual/other-source
+    // property media untouched.
+    await this.prisma.properties.updateMany({
+      where: {
+        company_id: document.company_id,
+        source_asset_id: document.id,
+      },
+      data: { image_urls: null },
+    })
     const current = await this.prisma.properties.findMany({
-      where: { company_id: document.company_id },
+      where: {
+        company_id: document.company_id,
+        status: { not: 'hidden' },
+      },
     })
     const children = await this.prisma.company_assets.findMany({
       where: {
@@ -461,15 +523,11 @@ export class MediaIntelligenceService {
       const duplicate = current.find(item =>
         this.isDuplicateProperty(item, { ...property, title, location }),
       )
-      const images = this.imagesForExtractedProperty(
-        property,
-        children,
-      )
+      const images = this.imagesForExtractedProperty(property, children)
       if (duplicate) {
-        const sameDocument = duplicate.source_asset_id === document.id
-        const mergedImages = sameDocument
-          ? images
-          : [...new Set([...this.urls(duplicate.image_urls), ...images])]
+        const mergedImages = [
+          ...new Set([...this.urls(duplicate.image_urls), ...images]),
+        ]
         await this.prisma.properties.update({
           where: { id: duplicate.id },
           data: {
@@ -494,11 +552,14 @@ export class MediaIntelligenceService {
             features: duplicate.features || property.features || null,
             image_urls: mergedImages.length
               ? mergedImages.slice(0, 10).join(',')
-              : sameDocument
-                ? null
-                : duplicate.image_urls,
+              : duplicate.image_urls,
             source_fingerprint: duplicate.source_fingerprint || fingerprint,
           },
+        })
+        Object.assign(duplicate, {
+          image_urls: mergedImages.length
+            ? mergedImages.slice(0, 10).join(',')
+            : duplicate.image_urls,
         })
         saved++
         continue
@@ -667,22 +728,40 @@ export class MediaIntelligenceService {
     return removed
   }
 
-  private parseDocumentProperties(raw: string): ExtractedProperty[] {
+  private propertyExtractionPrompt(): string {
+    return 'Extract only explicitly stated real-estate listings from the supplied brochure content. Never infer or invent a price, location, title document, availability, room count, feature, or image relationship. Return strict JSON only: {"properties":[{"title":"","description":null,"property_type":null,"location":null,"state":null,"price":null,"price_max":null,"currency":"NGN","size_sqm":null,"bedrooms":null,"bathrooms":null,"title_document":null,"payment_plan":null,"features":null,"status":"available|reserved|sold|hidden","image_indices":[1]}]}. image_indices must contain only the 1-based numbers of images that visibly contain that exact listing and its property photograph. Do not assign logos, generic covers, maps, quotes, people-only pages, or another listing\'s picture. Leave image_indices empty when uncertain. Use numeric naira values without commas. Return {"properties":[]} when there is no identifiable property listing. Keep each description factual and under 600 characters.'
+  }
+
+  private pdfTextChunks(text: string): string[] {
+    const normalized = text.trim()
+    if (!normalized) return []
+    const size = 7_000
+    const chunks: string[] = []
+    for (
+      let offset = 0;
+      offset < normalized.length && chunks.length < 4;
+      offset += size
+    ) {
+      chunks.push(normalized.slice(offset, offset + size))
+    }
+    return chunks
+  }
+
+  private parseDocumentProperties(raw: string): ExtractedProperty[] | null {
     try {
       const start = raw.indexOf('{')
       const end = raw.lastIndexOf('}')
-      if (start < 0 || end <= start) return []
+      if (start < 0 || end <= start) return null
       const parsed = JSON.parse(raw.slice(start, end + 1))
-      return Array.isArray(parsed?.properties)
-        ? parsed.properties.filter(
-            (item: unknown) =>
-              item &&
-              typeof item === 'object' &&
-              typeof (item as any).title === 'string',
-          )
-        : []
+      if (!Array.isArray(parsed?.properties)) return null
+      return parsed.properties.filter(
+        (item: unknown) =>
+          item &&
+          typeof item === 'object' &&
+          typeof (item as any).title === 'string',
+      )
     } catch {
-      return []
+      return null
     }
   }
 
@@ -693,9 +772,9 @@ export class MediaIntelligenceService {
       })
       if (!response.ok) return null
       const length = Number(response.headers.get('content-length') || 0)
-      if (length > 25 * 1024 * 1024) return null
+      if (length > 60 * 1024 * 1024) return null
       const buffer = Buffer.from(await response.arrayBuffer())
-      if (!buffer.length || buffer.length > 25 * 1024 * 1024) return null
+      if (!buffer.length || buffer.length > 60 * 1024 * 1024) return null
       const pdfParse = require('pdf-parse') as (
         input: Buffer,
       ) => Promise<{ text?: string }>
@@ -706,7 +785,7 @@ export class MediaIntelligenceService {
         .replace(/\n{3,}/g, '\n\n')
         .trim()
       if (text.length < 40) return null
-      return this.samplePdfText(text, 12_000)
+      return this.samplePdfText(text, 28_000)
     } catch (error) {
       this.logger.warn(`Local PDF text extraction failed: ${error?.message}`)
       return null

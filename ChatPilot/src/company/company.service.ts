@@ -20,12 +20,19 @@ import {
   decryptContactsInPlace,
 } from 'src/common/crypto/contact-crypto'
 import { createHash } from 'node:crypto'
+import { execFile } from 'node:child_process'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
 import AdmZip from 'adm-zip'
 import { InjectQueue } from '@nestjs/bullmq'
 import { Queue } from 'bullmq'
 import { BackgroundQueue } from 'src/utils/constants/background.constants'
 
 const OTP_TTL_MS = 60 * 1000
+const MAX_PDF_BYTES = 60 * 1024 * 1024
+const execFileAsync = promisify(execFile)
 
 @Injectable()
 export class CompanyService {
@@ -717,9 +724,9 @@ Generate ONLY the system prompt text, no explanations.`,
           })
           if (response.ok) {
             const length = Number(response.headers.get('content-length') || 0)
-            if (!length || length <= 25 * 1024 * 1024) {
+            if (!length || length <= MAX_PDF_BYTES) {
               const buffer = Buffer.from(await response.arrayBuffer())
-              if (buffer.length <= 25 * 1024 * 1024) {
+              if (buffer.length <= MAX_PDF_BYTES) {
                 await this.extractDocumentImages(
                   companyId,
                   asset.id,
@@ -772,6 +779,64 @@ Generate ONLY the system prompt text, no explanations.`,
     return { deleted: deleted.count }
   }
 
+  /**
+   * Backfills deterministic page renders for an existing PDF. The content
+   * worker calls this before AI indexing, so old uploads and future retries
+   * use the same reliable page/property relationship.
+   */
+  async ensurePdfPageImages(
+    assetId: number,
+    expectedCompanyId?: number,
+  ): Promise<number> {
+    const document = await this.prisma.company_assets.findFirst({
+      where: {
+        id: assetId,
+        file_type: 'pdf',
+        ...(expectedCompanyId ? { company_id: expectedCompanyId } : {}),
+      },
+    })
+    if (!document) return 0
+
+    const renderedPages = await this.prisma.company_assets.count({
+      where: {
+        company_id: document.company_id,
+        source: 'document-extract',
+        source_ref: String(document.id),
+        description: { startsWith: 'Rendered page ' },
+      },
+    })
+    if (renderedPages) return renderedPages
+
+    const response = await fetch(document.file_url, {
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (!response.ok) {
+      throw new ServiceUnavailableException(
+        `Could not download PDF ${document.id} for repair`,
+      )
+    }
+    const length = Number(response.headers.get('content-length') || 0)
+    if (length > MAX_PDF_BYTES) {
+      throw new UnprocessableEntityException(
+        `PDF ${document.id} exceeds the 60 MB indexing limit`,
+      )
+    }
+    const buffer = Buffer.from(await response.arrayBuffer())
+    if (!buffer.length || buffer.length > MAX_PDF_BYTES) {
+      throw new UnprocessableEntityException(
+        `PDF ${document.id} could not be read within the indexing limit`,
+      )
+    }
+
+    return this.extractDocumentImages(
+      document.company_id,
+      document.id,
+      document.file_name,
+      buffer,
+      'pdf',
+    )
+  }
+
   private async extractDocumentImages(
     companyId: number,
     parentId: number,
@@ -779,7 +844,12 @@ Generate ONLY the system prompt text, no explanations.`,
     buffer: Buffer,
     fileType: string,
   ): Promise<number> {
-    const candidates: Array<{ name: string; buffer: Buffer; mime: string }> = []
+    const candidates: Array<{
+      name: string
+      buffer: Buffer
+      mime: string
+      description?: string
+    }> = []
 
     if (['doc', 'ppt', 'xls'].includes(fileType) && /x$/i.test(fileName)) {
       try {
@@ -811,24 +881,43 @@ Generate ONLY the system prompt text, no explanations.`,
     }
 
     if (fileType === 'pdf') {
-      // Most marketing PDFs keep photographs as complete JPEG streams. Pull
-      // those streams without rendering pages or consuming AI credits.
-      let offset = 0
-      while (candidates.length < 8) {
-        const start = buffer.indexOf(Buffer.from([0xff, 0xd8, 0xff]), offset)
-        if (start < 0) break
-        const end = buffer.indexOf(Buffer.from([0xff, 0xd9]), start + 3)
-        if (end < 0) break
-        const image = buffer.subarray(start, end + 2)
-        if (image.length >= 12_000) {
-          candidates.push({
-            name: `pdf-image-${candidates.length + 1}.jpg`,
-            buffer: image,
-            mime: 'image/jpeg',
-          })
+      const pages = await this.renderPdfPages(buffer)
+      candidates.push(...pages)
+
+      // Keep a raw-JPEG fallback for unusual PDFs when Poppler cannot render.
+      // Page renders are preferred because PDF object order is not page order.
+      if (!pages.length) {
+        let offset = 0
+        while (candidates.length < 8) {
+          const start = buffer.indexOf(Buffer.from([0xff, 0xd8, 0xff]), offset)
+          if (start < 0) break
+          const end = buffer.indexOf(Buffer.from([0xff, 0xd9]), start + 3)
+          if (end < 0) break
+          const image = buffer.subarray(start, end + 2)
+          if (image.length >= 12_000) {
+            candidates.push({
+              name: `pdf-image-${candidates.length + 1}.jpg`,
+              buffer: image,
+              mime: 'image/jpeg',
+              description: `Embedded image extracted from ${fileName}`,
+            })
+          }
+          offset = end + 2
         }
-        offset = end + 2
       }
+    }
+
+    if (fileType === 'pdf' && candidates.length) {
+      // Preserve old assets for audit/recovery while removing unreliable raw
+      // mappings from the active document index.
+      await this.prisma.company_assets.updateMany({
+        where: {
+          company_id: companyId,
+          source: 'document-extract',
+          source_ref: String(parentId),
+        },
+        data: { source: 'document-legacy' },
+      })
     }
 
     let created = 0
@@ -838,17 +927,38 @@ Generate ONLY the system prompt text, no explanations.`,
       if (seen.has(hash)) continue
       seen.add(hash)
       const duplicate = await this.prisma.company_assets.findFirst({
-        where: { company_id: companyId, content_hash: hash },
+        where: {
+          company_id: companyId,
+          content_hash: hash,
+          source_ref: String(parentId),
+          source: { in: ['document-extract', 'document-legacy'] },
+        },
         select: { id: true },
       })
-      if (duplicate) continue
+      const description =
+        candidate.description || `Image extracted from ${fileName}`
+      if (duplicate) {
+        await this.prisma.company_assets.update({
+          where: { id: duplicate.id },
+          data: {
+            source: 'document-extract',
+            source_ref: String(parentId),
+            description,
+          },
+        })
+        created++
+        continue
+      }
       const ext =
         candidate.mime === 'image/png'
           ? 'png'
           : candidate.mime === 'image/webp'
             ? 'webp'
             : 'jpg'
-      const extractedName = `${fileName.replace(/\.[^.]+$/, '')}-image-${index + 1}.${ext}`
+      const label = candidate.name.startsWith('pdf-page-')
+        ? `page-${index + 1}`
+        : `image-${index + 1}`
+      const extractedName = `${fileName.replace(/\.[^.]+$/, '')}-${label}.${ext}`
       const url = await this.storageService.uploadCompanyAsset(
         companyId,
         extractedName,
@@ -862,7 +972,7 @@ Generate ONLY the system prompt text, no explanations.`,
           file_url: url,
           file_type: 'image',
           file_name: extractedName,
-          description: `Image extracted from ${fileName}`,
+          description,
           mime_type: candidate.mime,
           source: 'document-extract',
           source_ref: String(parentId),
@@ -872,6 +982,58 @@ Generate ONLY the system prompt text, no explanations.`,
       created++
     }
     return created
+  }
+
+  private async renderPdfPages(buffer: Buffer): Promise<
+    Array<{
+      name: string
+      buffer: Buffer
+      mime: string
+      description: string
+    }>
+  > {
+    const directory = await mkdtemp(join(tmpdir(), 'chatpilot-pdf-'))
+    const input = join(directory, 'document.pdf')
+    const outputPrefix = join(directory, 'page')
+    try {
+      await writeFile(input, buffer)
+      await execFileAsync(
+        'pdftoppm',
+        [
+          '-jpeg',
+          '-jpegopt',
+          'quality=82',
+          '-r',
+          '105',
+          '-f',
+          '1',
+          '-l',
+          '20',
+          input,
+          outputPrefix,
+        ],
+        { timeout: 120_000, maxBuffer: 2 * 1024 * 1024 },
+      )
+      const names = (await readdir(directory))
+        .filter(name => /^page-\d+\.jpg$/i.test(name))
+        .sort((a, b) =>
+          a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }),
+        )
+        .slice(0, 20)
+      return Promise.all(
+        names.map(async (name, index) => ({
+          name: `pdf-page-${index + 1}.jpg`,
+          buffer: await readFile(join(directory, name)),
+          mime: 'image/jpeg',
+          description: `Rendered page ${index + 1} from PDF`,
+        })),
+      )
+    } catch (error) {
+      this.logger.warn(`Could not render PDF pages: ${error?.message}`)
+      return []
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   }
 
   private async queueDocumentIndex(assetId: number, companyId: number) {

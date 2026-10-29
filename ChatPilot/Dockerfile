@@ -18,6 +18,10 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Render PDF brochure pages for reliable visual listing extraction. Pulling
+# raw JPEG byte streams loses the page/property relationship.
+RUN apk add --no-cache poppler-utils
+
 COPY package*.json ./
 RUN npm ci --omit=dev --legacy-peer-deps
 
