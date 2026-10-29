@@ -1602,13 +1602,7 @@ export default function AdminPage() {
               <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4">
                 <div className="mb-3 flex items-center gap-2">
                   <ShieldAlert className="h-5 w-5 text-amber-700" />
-                  <div>
-                    <h4 className="font-bold">Master workspace actions</h4>
-                    <p className="text-xs text-slate-500">
-                      These commands are enforced by the customer API, not only
-                      this screen.
-                    </p>
-                  </div>
+                  <h4 className="font-bold">Master workspace actions</h4>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-3">
                   <button
