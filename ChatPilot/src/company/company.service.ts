@@ -1021,13 +1021,51 @@ Generate ONLY the system prompt text, no explanations.`,
           a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }),
         )
         .slice(0, 20)
+      let embeddedPageText: string[] = []
+      try {
+        const extracted = await execFileAsync(
+          'pdftotext',
+          ['-layout', input, '-'],
+          { timeout: 60_000, maxBuffer: 8 * 1024 * 1024 },
+        )
+        embeddedPageText = String(extracted.stdout || '').split('\f')
+      } catch (error) {
+        this.logger.warn(`Could not extract PDF page text: ${error?.message}`)
+      }
+
       return Promise.all(
-        names.map(async (name, index) => ({
-          name: `pdf-page-${index + 1}.jpg`,
-          buffer: await readFile(join(directory, name)),
-          mime: 'image/jpeg',
-          description: `Rendered page ${index + 1} from PDF`,
-        })),
+        names.map(async (name, index) => {
+          const imagePath = join(directory, name)
+          let pageText = String(embeddedPageText[index] || '').trim()
+          if (pageText.length < 40) {
+            try {
+              const ocr = await execFileAsync(
+                'tesseract',
+                [imagePath, 'stdout', '-l', 'eng'],
+                { timeout: 90_000, maxBuffer: 4 * 1024 * 1024 },
+              )
+              pageText = String(ocr.stdout || '').trim()
+            } catch (error) {
+              this.logger.warn(
+                `Could not OCR PDF page ${index + 1}: ${error?.message}`,
+              )
+            }
+          }
+          const normalizedText = pageText
+            .replace(/\u0000/g, ' ')
+            .replace(/[ \t]+/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim()
+            .slice(0, 5_000)
+          return {
+            name: `pdf-page-${index + 1}.jpg`,
+            buffer: await readFile(imagePath),
+            mime: 'image/jpeg',
+            description: `Rendered page ${index + 1} from PDF${
+              normalizedText ? `\nPage text:\n${normalizedText}` : ''
+            }`,
+          }
+        }),
       )
     } catch (error) {
       this.logger.warn(`Could not render PDF pages: ${error?.message}`)

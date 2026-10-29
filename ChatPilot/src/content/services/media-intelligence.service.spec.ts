@@ -147,6 +147,66 @@ describe('MediaIntelligenceService document extraction', () => {
     )
   })
 
+  it('uses page OCR text for deterministic image mapping without a vision request', async () => {
+    const page = {
+      file_url: 'https://cdn.test/page-1.jpg',
+      file_name: 'brochure-page-1.jpg',
+      mime_type: 'image/jpeg',
+      description:
+        'Rendered page 1 from PDF\nPage text:\n4-bedroom duplex in Lekki for NGN 200,000,000',
+      ai_summary: null,
+      ai_tags: null,
+    }
+    const prisma = {
+      company_assets: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 31,
+          company_id: 6,
+          file_name: 'brochure.pdf',
+          file_url: 'https://cdn.test/brochure.pdf',
+          description: null,
+          property_extracted_at: null,
+        }),
+        findMany: jest.fn().mockResolvedValue([page]),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      properties: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({}),
+        update: jest.fn(),
+      },
+    } as any
+    const aiRouting = {
+      generate: jest.fn().mockResolvedValue({
+        text: JSON.stringify({
+          properties: [
+            {
+              title: '4-bedroom duplex',
+              location: 'Lekki',
+              price: 200000000,
+              image_indices: [1],
+            },
+          ],
+        }),
+      }),
+    } as any
+    const service = new MediaIntelligenceService(prisma, aiRouting, {
+      create: jest.fn(),
+    } as any)
+    jest.spyOn(service as any, 'extractPdfText').mockResolvedValue(null)
+
+    await service.indexDocument(31)
+
+    const request = aiRouting.generate.mock.calls[0][0]
+    expect(request.workload).toBe('content')
+    expect(request.prompt).toContain('4-bedroom duplex in Lekki')
+    expect(request.messages).toBeUndefined()
+    expect(prisma.properties.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ image_urls: page.file_url }),
+    })
+  })
+
   it('samples long PDF text across the document within the model budget', () => {
     const service = new MediaIntelligenceService(
       {} as any,

@@ -369,32 +369,37 @@ export class MediaIntelligenceService {
       // order, retain the exact page/property relationship.
       for (let offset = 0; offset < documentImages.length; offset += 1) {
         const batch = documentImages.slice(offset, offset + 1)
+        const pageText = this.documentPageText(batch[0]?.description)
         const result = await this.aiRouting.generate({
-          workload: AiWorkload.MediaIndex,
+          workload: pageText ? AiWorkload.Content : AiWorkload.MediaIndex,
           companyId: document.company_id,
           system: this.propertyExtractionPrompt(),
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `Extract only the distinct property listings visible on these ${batch.length} rendered brochure page(s) from ${document.file_name}. The image numbers below are local to this batch. A page screenshot may be used as the listing image only when it visibly contains that listing and its property photograph.`,
-                },
-                ...batch.flatMap((asset, index) => [
+          ...(pageText
+            ? {
+                prompt: `Extract only the distinct property listings explicitly stated on this rendered brochure page from ${document.file_name}. The page screenshot is Image 1. Set image_indices to [1] only for a property listed on this page; otherwise return an empty properties array.\n\nPage text:\n${pageText}`,
+              }
+            : {
+                messages: [
                   {
-                    type: 'text' as const,
-                    text: `Image ${index + 1}: ${asset.file_name}`,
+                    role: 'user',
+                    content: [
+                      {
+                        type: 'text',
+                        text: `Extract only the distinct property listings visible on this rendered brochure page from ${document.file_name}. The image number below is local to this page. Use the page screenshot as the listing image only when it visibly contains that listing and its property photograph.`,
+                      },
+                      {
+                        type: 'text' as const,
+                        text: `Image 1: ${batch[0].file_name}`,
+                      },
+                      {
+                        type: 'file' as const,
+                        data: new URL(batch[0].file_url),
+                        mediaType: batch[0].mime_type || 'image/jpeg',
+                      },
+                    ],
                   },
-                  {
-                    type: 'file' as const,
-                    data: new URL(asset.file_url),
-                    mediaType: asset.mime_type || 'image/jpeg',
-                  },
-                ]),
-              ],
-            },
-          ],
+                ],
+              }),
           maxOutputTokens: 900,
           temperature: 0.1,
         })
@@ -730,6 +735,16 @@ export class MediaIntelligenceService {
 
   private propertyExtractionPrompt(): string {
     return 'Extract only explicitly stated real-estate listings from the supplied brochure content. Never infer or invent a price, location, title document, availability, room count, feature, or image relationship. Return strict JSON only: {"properties":[{"title":"","description":null,"property_type":null,"location":null,"state":null,"price":null,"price_max":null,"currency":"NGN","size_sqm":null,"bedrooms":null,"bathrooms":null,"title_document":null,"payment_plan":null,"features":null,"status":"available|reserved|sold|hidden","image_indices":[1]}]}. image_indices must contain only the 1-based numbers of images that visibly contain that exact listing and its property photograph. Do not assign logos, generic covers, maps, quotes, people-only pages, or another listing\'s picture. Leave image_indices empty when uncertain. Use numeric naira values without commas. Return {"properties":[]} when there is no identifiable property listing. Keep each description factual and under 600 characters.'
+  }
+
+  private documentPageText(description: string | null | undefined): string {
+    const marker = '\nPage text:\n'
+    const index = description?.indexOf(marker) ?? -1
+    if (index < 0) return ''
+    return String(description)
+      .slice(index + marker.length)
+      .trim()
+      .slice(0, 5_000)
   }
 
   private pdfTextChunks(text: string): string[] {
