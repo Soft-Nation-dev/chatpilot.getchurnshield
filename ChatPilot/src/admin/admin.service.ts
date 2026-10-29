@@ -647,7 +647,7 @@ export class AdminService {
     for (const document of documents) {
       await this.contentQueue.add(
         'index-document',
-        { assetId: document.id, companyId },
+        { assetId: document.id, companyId, rebuildPages: true },
         {
           jobId: `admin-reindex-document-${document.id}-${batch}`,
           attempts: 3,

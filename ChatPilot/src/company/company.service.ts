@@ -787,6 +787,7 @@ Generate ONLY the system prompt text, no explanations.`,
   async ensurePdfPageImages(
     assetId: number,
     expectedCompanyId?: number,
+    forceRebuild: boolean = false,
   ): Promise<number> {
     const document = await this.prisma.company_assets.findFirst({
       where: {
@@ -805,7 +806,7 @@ Generate ONLY the system prompt text, no explanations.`,
         description: { startsWith: 'Rendered page ' },
       },
     })
-    if (renderedPages) return renderedPages
+    if (renderedPages && !forceRebuild) return renderedPages
 
     const response = await fetch(document.file_url, {
       signal: AbortSignal.timeout(30_000),
@@ -1002,9 +1003,9 @@ Generate ONLY the system prompt text, no explanations.`,
         [
           '-jpeg',
           '-jpegopt',
-          'quality=82',
+          'quality=72',
           '-r',
-          '105',
+          '82',
           '-f',
           '1',
           '-l',

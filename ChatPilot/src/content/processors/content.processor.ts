@@ -25,6 +25,7 @@ export class ContentProcessor extends WorkerHost {
       await this.company.ensurePdfPageImages(
         Number(job.data.assetId),
         job.data?.companyId ? Number(job.data.companyId) : undefined,
+        Boolean(job.data?.rebuildPages),
       )
       const extracted = await this.media.indexDocument(Number(job.data.assetId))
       return { assetId: job.data.assetId, extracted }

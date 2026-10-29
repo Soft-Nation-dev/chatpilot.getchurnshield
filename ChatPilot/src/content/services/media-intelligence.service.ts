@@ -367,8 +367,8 @@ export class MediaIntelligenceService {
     if (documentImages.length) {
       // Small page batches avoid provider timeouts and, unlike raw PDF object
       // order, retain the exact page/property relationship.
-      for (let offset = 0; offset < documentImages.length; offset += 2) {
-        const batch = documentImages.slice(offset, offset + 2)
+      for (let offset = 0; offset < documentImages.length; offset += 1) {
+        const batch = documentImages.slice(offset, offset + 1)
         const result = await this.aiRouting.generate({
           workload: AiWorkload.MediaIndex,
           companyId: document.company_id,
@@ -395,7 +395,7 @@ export class MediaIntelligenceService {
               ],
             },
           ],
-          maxOutputTokens: 1400,
+          maxOutputTokens: 900,
           temperature: 0.1,
         })
         const parsed = this.parseDocumentProperties(result.text)
