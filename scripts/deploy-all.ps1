@@ -33,6 +33,18 @@ function Invoke-Checked {
   }
 }
 
+function Invoke-NpmChecked {
+  param(
+    [Parameter(Mandatory = $true)][string[]]$ArgumentList
+  )
+  # npm scripts on Windows execute through nested .cmd files. Run them in a
+  # child process so a script-level exit cannot terminate this release runner.
+  $process = Start-Process -FilePath 'npm.cmd' -ArgumentList $ArgumentList -NoNewWindow -Wait -PassThru
+  if ($process.ExitCode -ne 0) {
+    throw "npm.cmd failed with exit code $($process.ExitCode)"
+  }
+}
+
 Set-Location $repoRoot
 New-Item -ItemType Directory -Force -Path (Join-Path $repoRoot 'tmp') | Out-Null
 
@@ -43,9 +55,9 @@ if ($trackedChanges) {
 }
 
 Write-Host 'Validating backend and frontend...'
-Invoke-Checked -FilePath npm.cmd -ArgumentList @('--prefix', 'ChatPilot', 'test', '--', '--runInBand')
-Invoke-Checked -FilePath npm.cmd -ArgumentList @('--prefix', 'ChatPilot', 'run', 'build')
-Invoke-Checked -FilePath npm.cmd -ArgumentList @('--prefix', 'frontend', 'run', 'build')
+Invoke-NpmChecked -ArgumentList @('--prefix', 'ChatPilot', 'test', '--', '--runInBand')
+Invoke-NpmChecked -ArgumentList @('--prefix', 'ChatPilot', 'run', 'build')
+Invoke-NpmChecked -ArgumentList @('--prefix', 'frontend', 'run', 'build')
 
 Write-Host 'Publishing the release commit...'
 Invoke-Checked -FilePath git -ArgumentList @('push', 'origin', 'HEAD:main')
@@ -67,7 +79,7 @@ if ($LASTEXITCODE -ne 0 -or $fingerprintOutput -notmatch [regex]::Escape($expect
 }
 
 Write-Host "Uploading backend release $sha..."
-Invoke-Checked -FilePath scp -ArgumentList @('-i', $deployKey, '-o', $sshKexOption, '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", $archive, "${deployUser}@${deployHost}:/tmp/release-$sha.tar")
+Invoke-Checked -FilePath scp -ArgumentList @('-O', '-i', $deployKey, '-o', $sshKexOption, '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3', '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", $archive, "${deployUser}@${deployHost}:/tmp/release-$sha.tar")
 
 $remoteDeploy = @'
 set -e
@@ -119,7 +131,7 @@ Write-Host 'Deploying the Hostinger backend...'
 Invoke-Checked -FilePath ssh -ArgumentList @('-i', $deployKey, '-o', $sshKexOption, '-o', 'StrictHostKeyChecking=yes', '-o', "UserKnownHostsFile=$knownHosts", "$deployUser@$deployHost", $remoteDeploy)
 
 Write-Host 'Deploying the Cloudflare frontend and R2-backed media routes...'
-Invoke-Checked -FilePath npm.cmd -ArgumentList @('--prefix', 'frontend', 'run', 'deploy')
+Invoke-NpmChecked -ArgumentList @('--prefix', 'frontend', 'run', 'deploy')
 
 Invoke-Checked -FilePath 'curl.exe' -ArgumentList @('--fail', '--silent', '--show-error', '--output', 'NUL', 'https://api.trygetchurnshield.com/api/v1/')
 Invoke-Checked -FilePath 'curl.exe' -ArgumentList @('--fail', '--silent', '--show-error', '--output', 'NUL', 'https://chatpilot.trygetchurnshield.com/')
