@@ -600,7 +600,7 @@ export class MediaIntelligenceService {
 
   async reconcileCompanyProperties(companyId: number): Promise<number> {
     const properties = await this.prisma.properties.findMany({
-      where: { company_id: companyId },
+      where: { company_id: companyId, status: { not: 'hidden' } },
       orderBy: { id: 'asc' },
     })
     const keepers: typeof properties = []
@@ -654,7 +654,12 @@ export class MediaIntelligenceService {
           where: { id: keeper.id },
           data: merged,
         }),
-        this.prisma.properties.delete({ where: { id: candidate.id } }),
+        // Keep the redundant source row recoverable for audit/manual review,
+        // but remove it from chat matching and content rotation.
+        this.prisma.properties.update({
+          where: { id: candidate.id },
+          data: { status: 'hidden' },
+        }),
       ])
       Object.assign(keeper, merged)
       removed++

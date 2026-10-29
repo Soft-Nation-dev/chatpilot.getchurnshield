@@ -627,7 +627,7 @@ export class AdminService {
       select: { id: true },
     })
     if (!company) throw new NotFoundException('Company not found')
-    const removedDuplicates =
+    const archivedDuplicates =
       await this.mediaIntelligence.reconcileCompanyProperties(companyId)
     const documents = await this.prisma.company_assets.findMany({
       where: { company_id: companyId, file_type: 'pdf' },
@@ -665,7 +665,7 @@ export class AdminService {
         entity_id: String(companyId),
         meta: {
           documents: documents.length,
-          duplicates_removed: removedDuplicates,
+          duplicates_archived: archivedDuplicates,
         },
         ip: ip?.slice(0, 45),
       },
@@ -673,7 +673,7 @@ export class AdminService {
     return {
       success: true,
       queued_documents: documents.length,
-      duplicates_removed: removedDuplicates,
+      duplicates_archived: archivedDuplicates,
     }
   }
 
