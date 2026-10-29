@@ -1,115 +1,115 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, CheckCheck } from 'lucide-react'
-import { useAuth } from '@/context/auth-context'
-import { useSidebar } from './sidebar'
-import { Button } from '@/components/ui/button'
-import api from '@/lib/api'
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bell, CheckCheck } from "lucide-react";
+import { useAuth } from "@/context/auth-context";
+import { useSidebar } from "./sidebar";
+import { Button } from "@/components/ui/button";
+import api from "@/lib/api";
 
 type Notification = {
-  id: number
-  type: string
-  severity: 'info' | 'success' | 'warning' | 'error'
-  title: string
-  message: string
-  entity: string | null
-  entity_id: string | null
-  read_at: string | null
-  created_at: string
-}
+  id: number;
+  type: string;
+  severity: "info" | "success" | "warning" | "error";
+  title: string;
+  message: string;
+  entity: string | null;
+  entity_id: string | null;
+  read_at: string | null;
+  created_at: string;
+};
 
 const notificationHref = (notification: Notification) => {
-  if (notification.entity === 'content') return '/content'
-  if (notification.entity === 'media') return '/media'
-  if (notification.entity === 'chat') return '/chats'
-  if (notification.entity === 'property') return '/properties'
-  return '/dashboard'
-}
+  if (notification.entity === "content") return "/content";
+  if (notification.entity === "media") return "/media";
+  if (notification.entity === "chat") return "/chats";
+  if (notification.entity === "property") return "/properties";
+  return "/dashboard";
+};
 
-const severityDot: Record<Notification['severity'], string> = {
-  info: 'bg-blue-500',
-  success: 'bg-emerald-500',
-  warning: 'bg-amber-500',
-  error: 'bg-red-500',
-}
+const severityDot: Record<Notification["severity"], string> = {
+  info: "bg-blue-500",
+  success: "bg-emerald-500",
+  warning: "bg-amber-500",
+  error: "bg-red-500",
+};
 
 export function Header() {
-  const { user, logout } = useAuth()
-  const { setOpen } = useSidebar()
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [unread, setUnread] = useState(0)
-  const [openNotifications, setOpenNotifications] = useState(false)
-  const notificationRef = useRef<HTMLDivElement>(null)
-  const companyId = user?.company_id
+  const { user, logout } = useAuth();
+  const { setOpen } = useSidebar();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [openNotifications, setOpenNotifications] = useState(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
+  const companyId = user?.company_id;
 
   const loadNotifications = useCallback(async () => {
-    if (!companyId) return
+    if (!companyId) return;
     try {
       const response = await api.get(`/companies/${companyId}/notifications`, {
         params: { take: 20 },
-      })
-      setNotifications(response.data.items || [])
-      setUnread(response.data.unread || 0)
+      });
+      setNotifications(response.data.items || []);
+      setUnread(response.data.unread || 0);
     } catch {
       // Notifications must never interrupt the rest of the dashboard.
     }
-  }, [companyId])
+  }, [companyId]);
 
   useEffect(() => {
-    loadNotifications()
-    const interval = window.setInterval(loadNotifications, 30000)
-    return () => window.clearInterval(interval)
-  }, [loadNotifications])
+    loadNotifications();
+    const interval = window.setInterval(loadNotifications, 30000);
+    return () => window.clearInterval(interval);
+  }, [loadNotifications]);
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
       if (!notificationRef.current?.contains(event.target as Node)) {
-        setOpenNotifications(false)
+        setOpenNotifications(false);
       }
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [])
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
 
   const markRead = async (notification: Notification) => {
-    if (!companyId || notification.read_at) return
+    if (!companyId || notification.read_at) return;
     setNotifications((current) =>
       current.map((item) =>
         item.id === notification.id
           ? { ...item, read_at: new Date().toISOString() }
           : item,
       ),
-    )
-    setUnread((current) => Math.max(0, current - 1))
+    );
+    setUnread((current) => Math.max(0, current - 1));
     try {
       await api.put(
         `/companies/${companyId}/notifications/${notification.id}/read`,
-      )
+      );
     } catch {
-      loadNotifications()
+      loadNotifications();
     }
-  }
+  };
 
   const markAllRead = async () => {
-    if (!companyId || !unread) return
+    if (!companyId || !unread) return;
     setNotifications((current) =>
       current.map((item) => ({
         ...item,
         read_at: item.read_at || new Date().toISOString(),
       })),
-    )
-    setUnread(0)
+    );
+    setUnread(0);
     try {
-      await api.put(`/companies/${companyId}/notifications/read-all`)
+      await api.put(`/companies/${companyId}/notifications/read-all`);
     } catch {
-      loadNotifications()
+      loadNotifications();
     }
-  }
+  };
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/60 backdrop-blur-xl px-6">
+    <header className="relative isolate z-[100] flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/60 px-6 backdrop-blur-xl">
       <div className="flex items-center gap-3">
         <button
           onClick={() => setOpen(true)}
@@ -159,18 +159,18 @@ export function Header() {
             type="button"
             onClick={() => setOpenNotifications((value) => !value)}
             className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-            aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}
+            aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
           >
             <Bell className="h-[18px] w-[18px]" />
             {unread > 0 && (
               <span className="absolute -right-1 -top-1 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
-                {unread > 9 ? '9+' : unread}
+                {unread > 9 ? "9+" : unread}
               </span>
             )}
           </button>
 
           {openNotifications && (
-            <div className="absolute right-0 top-11 z-50 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+            <div className="absolute right-0 top-11 z-[120] w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
@@ -178,8 +178,8 @@ export function Header() {
                   </p>
                   <p className="text-xs text-slate-500">
                     {unread
-                      ? `${unread} unread update${unread === 1 ? '' : 's'}`
-                      : 'You are up to date'}
+                      ? `${unread} unread update${unread === 1 ? "" : "s"}`
+                      : "You are up to date"}
                   </p>
                 </div>
                 <button
@@ -199,10 +199,10 @@ export function Header() {
                       key={notification.id}
                       href={notificationHref(notification)}
                       onClick={() => {
-                        markRead(notification)
-                        setOpenNotifications(false)
+                        markRead(notification);
+                        setOpenNotifications(false);
                       }}
-                      className={`block border-b border-slate-50 px-4 py-3 transition-colors hover:bg-slate-50 ${notification.read_at ? '' : 'bg-emerald-50/40'}`}
+                      className={`block border-b border-slate-50 px-4 py-3 transition-colors hover:bg-slate-50 ${notification.read_at ? "" : "bg-emerald-50/40"}`}
                     >
                       <div className="flex items-start gap-3">
                         <span
@@ -233,7 +233,7 @@ export function Header() {
         </div>
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-full gradient-primary flex items-center justify-center text-white font-semibold text-sm shadow-sm">
-            {user?.company_name?.charAt(0)?.toUpperCase() || 'U'}
+            {user?.company_name?.charAt(0)?.toUpperCase() || "U"}
           </div>
           <div className="hidden sm:block">
             <p className="text-sm font-medium text-foreground leading-none">
@@ -269,5 +269,5 @@ export function Header() {
         </Button>
       </div>
     </header>
-  )
+  );
 }

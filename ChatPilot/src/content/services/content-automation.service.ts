@@ -110,7 +110,6 @@ export class ContentAutomationService {
     if (!settings.enabled && !force) return { created: 0, posts: [] }
 
     const platforms = settings.platforms || 'facebook,instagram'
-    const needsImage = platforms.split(',').includes('instagram')
     const company = await this.prisma.companies.findUnique({
       where: { id: companyId },
       select: { business_details: true },
@@ -120,32 +119,50 @@ export class ContentAutomationService {
       where: {
         company_id: companyId,
         status: 'available',
-        ...(needsImage ? { image_urls: { not: null } } : {}),
+        image_urls: { not: null },
       },
       orderBy: { created_at: 'asc' },
     })
 
-    const usableProperties = properties.filter(
-      property => !needsImage || Boolean(property.image_urls?.trim()),
+    const usableProperties = properties.filter(property =>
+      Boolean(property.image_urls?.trim()),
     )
     const recentCutoff = addDays(new Date(), -settings.min_reuse_days)
     const recentlyUsed = await this.prisma.content_posts.findMany({
       where: {
         company_id: companyId,
         property_id: { not: null },
-        created_at: { gte: recentCutoff },
       },
-      select: { property_id: true },
+      select: { property_id: true, created_at: true },
+      orderBy: { created_at: 'desc' },
+      take: 2000,
     })
-    const recentIds = new Set(
-      recentlyUsed.map(row => row.property_id).filter(Boolean) as number[],
-    )
+    const lastUsedAt = new Map<number, number>()
+    for (const row of recentlyUsed) {
+      if (row.property_id && !lastUsedAt.has(row.property_id)) {
+        lastUsedAt.set(row.property_id, row.created_at.getTime())
+      }
+    }
     const freshProperties = usableProperties.filter(
-      row => !recentIds.has(row.id),
+      row => (lastUsedAt.get(row.id) ?? 0) < recentCutoff.getTime(),
     )
-    const propertyPool = freshProperties.length
-      ? freshProperties
-      : usableProperties
+    // Prefer never-used and least-recently-used listings. Once the configured
+    // freshness window is exhausted, reuse only a small cohort of the oldest
+    // listings so image-backed content keeps flowing without hammering one
+    // property repeatedly.
+    const rankedProperties = (
+      freshProperties.length ? freshProperties : usableProperties
+    ).sort(
+      (left, right) =>
+        (lastUsedAt.get(left.id) ?? 0) - (lastUsedAt.get(right.id) ?? 0),
+    )
+    const neverUsed = rankedProperties.filter(row => !lastUsedAt.has(row.id))
+    const propertyPool = neverUsed.length
+      ? neverUsed
+      : rankedProperties.slice(
+          0,
+          Math.min(3, Math.max(1, Math.ceil(rankedProperties.length / 3))),
+        )
 
     const times = this.stringArray(settings.posting_times, DEFAULT_TIMES).slice(
       0,
@@ -210,9 +227,7 @@ export class ContentAutomationService {
       const source = ['property', 'profile', 'random'][sourceIndex] ?? 'random'
       if (source === 'property' && !propertyPool.length) {
         skipped.push(
-          needsImage
-            ? 'Property draft skipped: add an available property with an image.'
-            : 'Property draft skipped: add an available property to the Property Vault.',
+          'Property draft skipped: add an available property with an image.',
         )
         continue
       }
@@ -225,10 +240,7 @@ export class ContentAutomationService {
 
       const property =
         source === 'property'
-          ? propertyPool[
-              (companyId + Math.floor(Date.now() / 86400000)) %
-                propertyPool.length
-            ]
+          ? propertyPool[Math.floor(Math.random() * propertyPool.length)]
           : null
       const kind =
         source === 'property'

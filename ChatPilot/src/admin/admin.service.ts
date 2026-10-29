@@ -6,6 +6,11 @@ import {
 import { NotificationsService } from 'src/notifications/notifications.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { LeadsService } from '../leads/services/leads.service'
+import { InjectQueue } from '@nestjs/bullmq'
+import { Queue } from 'bullmq'
+import { CompanyService } from '../company/company.service'
+import { MediaIntelligenceService } from '../content/services/media-intelligence.service'
+import { BackgroundQueue } from '../utils/constants/background.constants'
 
 const COMPANY_STATUSES = ['active', 'suspended'] as const
 const SUBSCRIPTION_STATUSES = [
@@ -48,6 +53,10 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly leadsService: LeadsService,
     private readonly notifications: NotificationsService,
+    private readonly companyService: CompanyService,
+    private readonly mediaIntelligence: MediaIntelligenceService,
+    @InjectQueue(BackgroundQueue.CONTENT)
+    private readonly contentQueue: Queue,
   ) {}
 
   async overview() {
@@ -393,6 +402,18 @@ export class AdminService {
           data: { token_version: { increment: 1 } },
         })
       }
+      if (typeof body.is_bot_activated === 'boolean') {
+        await tx.contacts.updateMany({
+          where: { company_id: companyId },
+          data: body.is_bot_activated
+            ? { is_bot_activated: true, is_replies_activated: true }
+            : { is_bot_activated: false },
+        })
+        await tx.leads.updateMany({
+          where: { company_id: companyId },
+          data: { is_bot_activated: body.is_bot_activated },
+        })
+      }
       await tx.audit_logs.create({
         data: {
           company_id: companyId,
@@ -540,6 +561,120 @@ export class AdminService {
       }),
     ])
     return { success: true }
+  }
+
+  async setAccessWindow(companyId: number, days: number, ip?: string) {
+    const duration = days === 7 ? 7 : days === 30 ? 30 : 0
+    if (!duration) {
+      throw new BadRequestException('Access window must be 7 or 30 days')
+    }
+    const started = new Date()
+    const expires = new Date(started.getTime() + duration * 86400000)
+    return this.updateCompany(
+      companyId,
+      {
+        account_status: 'active',
+        subscription_plan: duration === 7 ? 'trial' : 'manual-monthly',
+        subscription_status: duration === 7 ? 'trialing' : 'active',
+        subscription_started_at: started.toISOString(),
+        subscription_expires_at: expires.toISOString(),
+      },
+      ip,
+    )
+  }
+
+  async revokeCompanySessions(companyId: number, ip?: string) {
+    const company = await this.prisma.companies.findUnique({
+      where: { id: companyId },
+      select: { id: true },
+    })
+    if (!company) throw new NotFoundException('Company not found')
+    const [result] = await this.prisma.$transaction([
+      this.prisma.users.updateMany({
+        where: { company_id: companyId },
+        data: { token_version: { increment: 1 }, revoked_at: new Date() },
+      }),
+      this.prisma.audit_logs.create({
+        data: {
+          company_id: companyId,
+          action: 'admin.company_sessions_revoked',
+          entity: 'company',
+          entity_id: String(companyId),
+          ip: ip?.slice(0, 45),
+        },
+      }),
+    ])
+    return { success: true, users_signed_out: result.count }
+  }
+
+  async disconnectWhatsapp(companyId: number, ip?: string) {
+    const result = await this.companyService.removeSession(companyId)
+    await this.prisma.audit_logs.create({
+      data: {
+        company_id: companyId,
+        action: 'admin.whatsapp_disconnected',
+        entity: 'company',
+        entity_id: String(companyId),
+        ip: ip?.slice(0, 45),
+      },
+    })
+    return result
+  }
+
+  async reindexPropertyLibrary(companyId: number, ip?: string) {
+    const company = await this.prisma.companies.findUnique({
+      where: { id: companyId },
+      select: { id: true },
+    })
+    if (!company) throw new NotFoundException('Company not found')
+    const removedDuplicates =
+      await this.mediaIntelligence.reconcileCompanyProperties(companyId)
+    const documents = await this.prisma.company_assets.findMany({
+      where: { company_id: companyId, file_type: 'pdf' },
+      select: { id: true },
+      orderBy: { created_at: 'asc' },
+    })
+    if (documents.length) {
+      await this.prisma.company_assets.updateMany({
+        where: { id: { in: documents.map(item => item.id) } },
+        data: {
+          property_extracted_at: null,
+          extracted_property_count: 0,
+        },
+      })
+    }
+    const batch = Date.now()
+    for (const document of documents) {
+      await this.contentQueue.add(
+        'index-document',
+        { assetId: document.id, companyId },
+        {
+          jobId: `admin-reindex-document-${document.id}-${batch}`,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 30_000 },
+          removeOnComplete: 100,
+          removeOnFail: 100,
+        },
+      )
+    }
+    await this.prisma.audit_logs.create({
+      data: {
+        company_id: companyId,
+        action: 'admin.property_reindex_queued',
+        entity: 'company',
+        entity_id: String(companyId),
+        meta: {
+          documents: documents.length,
+          duplicates_removed: removedDuplicates,
+        },
+        ip: ip?.slice(0, 45),
+      },
+    })
+    return {
+      success: true,
+      queued_documents: documents.length,
+      duplicates_removed: removedDuplicates,
+    }
   }
 
   async auditLog(take = 100) {

@@ -47,6 +47,7 @@ describe('MediaIntelligenceService document extraction', () => {
               price: 200000000,
               currency: 'NGN',
               bedrooms: 4,
+              image_indices: [1],
               status: 'available',
             },
           ],
@@ -154,5 +155,44 @@ describe('MediaIntelligenceService document extraction', () => {
     expect(sampled).toContain('A')
     expect(sampled).toContain('B')
     expect(sampled).toContain('C')
+  })
+
+  it('maps each listing only to the explicit PDF image selected by the model', () => {
+    const service = new MediaIntelligenceService({} as any, {} as any, {} as any)
+    const children = [
+      { file_url: 'https://cdn.test/one.jpg', file_name: 'one.jpg' },
+      { file_url: 'https://cdn.test/two.jpg', file_name: 'two.jpg' },
+    ].map(item => ({
+      ...item,
+      description: null,
+      ai_summary: null,
+      ai_tags: null,
+    }))
+
+    const selected = (service as any).imagesForExtractedProperty(
+      { title: 'Second Duplex', image_indices: [2] },
+      children,
+      2,
+      1,
+    )
+
+    expect(selected).toEqual(['https://cdn.test/two.jpg'])
+  })
+
+  it('does not deduplicate generic titles without corroborating facts', () => {
+    const service = new MediaIntelligenceService({} as any, {} as any, {} as any)
+
+    expect(
+      (service as any).isDuplicateProperty(
+        { title: 'Duplex', property_type: 'Duplex' },
+        { title: 'Duplex', property_type: 'Duplex' },
+      ),
+    ).toBe(false)
+    expect(
+      (service as any).isDuplicateProperty(
+        { title: 'Duplex', location: 'Lekki', price: 200_000_000 },
+        { title: 'Duplex', location: 'Lekki', price: 200_000_000 },
+      ),
+    ).toBe(true)
   })
 })

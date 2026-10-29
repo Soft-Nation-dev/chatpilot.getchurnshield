@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import Image from 'next/image'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import Image from "next/image";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Ban,
@@ -26,130 +26,130 @@ import {
   Wifi,
   WifiOff,
   X,
-} from 'lucide-react'
-import { API_BASE_URL } from '@/lib/api-base'
+} from "lucide-react";
+import { API_BASE_URL } from "@/lib/api-base";
 
-type Tab = 'overview' | 'companies' | 'users' | 'audit'
+type Tab = "overview" | "companies" | "users" | "audit";
 
 type Overview = {
-  totals: Record<string, number>
-  last_30_days: Record<string, number>
+  totals: Record<string, number>;
+  last_30_days: Record<string, number>;
   provider_usage: Array<{
-    provider: string
-    requests: number
-    tokens: number
-    estimated_units: number
-  }>
-  daily_activity: Array<{ date: string; messages: number; signups: number }>
-}
+    provider: string;
+    requests: number;
+    tokens: number;
+    estimated_units: number;
+  }>;
+  daily_activity: Array<{ date: string; messages: number; signups: number }>;
+};
 
 type Company = {
-  id: number
-  name: string
-  phone: number
-  email: string | null
-  created_at: string
-  updated_at: string | null
-  account_status: 'active' | 'suspended'
-  subscription_plan: string
-  subscription_status: string
-  subscription_started_at: string | null
-  subscription_expires_at: string | null
-  suspended_at: string | null
-  suspension_reason: string | null
-  monthly_lead_quota: number | null
-  daily_lead_limit: number | null
-  monthly_used: number
-  daily_used: number
-  is_bot_activated: boolean | null
-  social_reply_enabled: boolean | null
-  whatsapp_connection_status: boolean | null
-  timezone: string | null
-  last_login_at: string | null
-  _count: Record<string, number>
-}
+  id: number;
+  name: string;
+  phone: number;
+  email: string | null;
+  created_at: string;
+  updated_at: string | null;
+  account_status: "active" | "suspended";
+  subscription_plan: string;
+  subscription_status: string;
+  subscription_started_at: string | null;
+  subscription_expires_at: string | null;
+  suspended_at: string | null;
+  suspension_reason: string | null;
+  monthly_lead_quota: number | null;
+  daily_lead_limit: number | null;
+  monthly_used: number;
+  daily_used: number;
+  is_bot_activated: boolean | null;
+  social_reply_enabled: boolean | null;
+  whatsapp_connection_status: boolean | null;
+  timezone: string | null;
+  last_login_at: string | null;
+  _count: Record<string, number>;
+};
 
 type AdminUser = {
-  id: number
-  phone: string
-  full_name: string | null
-  company_name: string | null
-  company_id: number
-  role: 'owner' | 'manager' | 'agent'
-  status: 'active' | 'invited' | 'suspended' | 'revoked'
-  can_view_contact_phone: boolean
-  created_at: string
-  updated_at: string | null
-  last_login_at: string | null
+  id: number;
+  phone: string;
+  full_name: string | null;
+  company_name: string | null;
+  company_id: number;
+  role: "owner" | "manager" | "agent";
+  status: "active" | "invited" | "suspended" | "revoked";
+  can_view_contact_phone: boolean;
+  created_at: string;
+  updated_at: string | null;
+  last_login_at: string | null;
   company: {
-    name: string
-    account_status: string
-    subscription_expires_at: string | null
-  }
-}
+    name: string;
+    account_status: string;
+    subscription_expires_at: string | null;
+  };
+};
 
 type AuditRow = {
-  id: number
-  company_id: number
-  company_name: string
-  user_id: number | null
-  action: string
-  entity: string | null
-  entity_id: string | null
-  meta: unknown
-  ip: string | null
-  created_at: string
-}
+  id: number;
+  company_id: number;
+  company_name: string;
+  user_id: number | null;
+  action: string;
+  entity: string | null;
+  entity_id: string | null;
+  meta: unknown;
+  ip: string | null;
+  created_at: string;
+};
 
 type CompanyForm = {
-  name: string
-  email: string
-  account_status: string
-  subscription_plan: string
-  subscription_status: string
-  subscription_started_at: string
-  subscription_expires_at: string
-  suspension_reason: string
-  monthly_lead_quota: number
-  daily_lead_limit: number
-  is_bot_activated: boolean
-  social_reply_enabled: boolean
-  timezone: string
-}
+  name: string;
+  email: string;
+  account_status: string;
+  subscription_plan: string;
+  subscription_status: string;
+  subscription_started_at: string;
+  subscription_expires_at: string;
+  suspension_reason: string;
+  monthly_lead_quota: number;
+  daily_lead_limit: number;
+  is_bot_activated: boolean;
+  social_reply_enabled: boolean;
+  timezone: string;
+};
 
-const API = API_BASE_URL
+const API = API_BASE_URL;
 const unwrap = <T,>(value: { data?: T } | T): T =>
-  value && typeof value === 'object' && 'data' in value
+  value && typeof value === "object" && "data" in value
     ? (value as { data: T }).data
-    : (value as T)
+    : (value as T);
 
 const dateLabel = (value: string | null | undefined) =>
-  value ? new Date(value).toLocaleString() : 'Never'
+  value ? new Date(value).toLocaleString() : "Never";
 
 const dateInput = (value: string | null | undefined) =>
-  value ? new Date(value).toISOString().slice(0, 16) : ''
+  value ? new Date(value).toISOString().slice(0, 16) : "";
 
 const statusClass = (status: string) => {
-  if (['active', 'trialing', 'published', 'success'].includes(status)) {
-    return 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  if (["active", "trialing", "published", "success"].includes(status)) {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
-  if (['suspended', 'expired', 'revoked', 'error'].includes(status)) {
-    return 'border-red-200 bg-red-50 text-red-700'
+  if (["suspended", "expired", "revoked", "error"].includes(status)) {
+    return "border-red-200 bg-red-50 text-red-700";
   }
-  if (['past_due', 'invited', 'warning'].includes(status)) {
-    return 'border-amber-200 bg-amber-50 text-amber-700'
+  if (["past_due", "invited", "warning"].includes(status)) {
+    return "border-amber-200 bg-amber-50 text-amber-700";
   }
-  return 'border-slate-200 bg-slate-50 text-slate-600'
-}
+  return "border-slate-200 bg-slate-50 text-slate-600";
+};
 
 function StatusPill({ value }: { value: string }) {
   return (
     <span
       className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusClass(value)}`}
     >
-      {value.replaceAll('_', ' ')}
+      {value.replaceAll("_", " ")}
     </span>
-  )
+  );
 }
 
 function StatCard({
@@ -158,10 +158,10 @@ function StatCard({
   icon: Icon,
   detail,
 }: {
-  label: string
-  value: number
-  icon: typeof Building2
-  detail?: string
+  label: string;
+  value: number;
+  icon: typeof Building2;
+  detail?: string;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -180,27 +180,27 @@ function StatCard({
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 export default function AdminPage() {
-  const [secret, setSecret] = useState('')
-  const [authed, setAuthed] = useState(false)
-  const [tab, setTab] = useState<Tab>('overview')
-  const [overview, setOverview] = useState<Overview | null>(null)
-  const [companies, setCompanies] = useState<Company[]>([])
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [audit, setAudit] = useState<AuditRow[]>([])
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
-  const [companyForm, setCompanyForm] = useState<CompanyForm | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [busy, setBusy] = useState<string | null>(null)
+  const [secret, setSecret] = useState("");
+  const [authed, setAuthed] = useState(false);
+  const [tab, setTab] = useState<Tab>("overview");
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [audit, setAudit] = useState<AuditRow[]>([]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [companyForm, setCompanyForm] = useState<CompanyForm | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{
-    kind: 'success' | 'error'
-    text: string
-  } | null>(null)
+    kind: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const request = useCallback(
     async <T,>(
@@ -211,126 +211,174 @@ export default function AdminPage() {
       const response = await fetch(`${API}/admin${path}`, {
         ...init,
         headers: {
-          'Content-Type': 'application/json',
-          'x-admin-secret': overrideSecret ?? secret,
+          "Content-Type": "application/json",
+          "x-admin-secret": overrideSecret ?? secret,
           ...(init?.headers || {}),
         },
-      })
+      });
       if (!response.ok) {
-        if (response.status === 401) throw new Error('unauthorized')
-        const body = await response.json().catch(() => null)
-        throw new Error(body?.message || 'Request failed')
+        if (response.status === 401) throw new Error("unauthorized");
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message || "Request failed");
       }
-      return unwrap<T>(await response.json())
+      return unwrap<T>(await response.json());
     },
     [secret],
-  )
+  );
 
   const loadAll = useCallback(
     async (key: string) => {
-      setLoading(true)
+      setLoading(true);
       try {
         const [summary, companyRows, userRows, auditRows] = await Promise.all([
-          request<Overview>('/overview', undefined, key),
-          request<Company[]>('/companies', undefined, key),
-          request<AdminUser[]>('/users', undefined, key),
-          request<AuditRow[]>('/audit?take=150', undefined, key),
-        ])
-        setOverview(summary)
-        setCompanies(companyRows)
-        setUsers(userRows)
-        setAudit(auditRows)
-        setAuthed(true)
-        sessionStorage.setItem('admin_secret', key)
-        setNotice(null)
+          request<Overview>("/overview", undefined, key),
+          request<Company[]>("/companies", undefined, key),
+          request<AdminUser[]>("/users", undefined, key),
+          request<AuditRow[]>("/audit?take=150", undefined, key),
+        ]);
+        setOverview(summary);
+        setCompanies(companyRows);
+        setUsers(userRows);
+        setAudit(auditRows);
+        setAuthed(true);
+        sessionStorage.setItem("admin_secret", key);
+        setNotice(null);
       } catch (error) {
-        setAuthed(false)
-        sessionStorage.removeItem('admin_secret')
+        setAuthed(false);
+        sessionStorage.removeItem("admin_secret");
         setNotice({
-          kind: 'error',
+          kind: "error",
           text:
-            error instanceof Error && error.message !== 'unauthorized'
+            error instanceof Error && error.message !== "unauthorized"
               ? error.message
-              : 'Invalid admin secret.',
-        })
+              : "Invalid admin secret.",
+        });
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     },
     [request],
-  )
+  );
 
   useEffect(() => {
-    const saved = sessionStorage.getItem('admin_secret')
+    const saved = sessionStorage.getItem("admin_secret");
     if (saved) {
-      setSecret(saved)
-      loadAll(saved)
+      setSecret(saved);
+      loadAll(saved);
     }
-  }, [loadAll])
+  }, [loadAll]);
 
-  const flash = (text: string, kind: 'success' | 'error' = 'success') => {
-    setNotice({ text, kind })
-    window.setTimeout(() => setNotice(null), 5000)
-  }
+  const flash = (text: string, kind: "success" | "error" = "success") => {
+    setNotice({ text, kind });
+    window.setTimeout(() => setNotice(null), 5000);
+  };
 
   const refresh = async () => {
-    await loadAll(secret)
-    flash('Dashboard refreshed.')
-  }
+    await loadAll(secret);
+    flash("Dashboard refreshed.");
+  };
 
   const signOut = () => {
-    sessionStorage.removeItem('admin_secret')
-    setSecret('')
-    setAuthed(false)
-    setOverview(null)
-  }
+    sessionStorage.removeItem("admin_secret");
+    setSecret("");
+    setAuthed(false);
+    setOverview(null);
+  };
 
   const openCompany = (company: Company) => {
-    setSelectedCompany(company)
+    setSelectedCompany(company);
     setCompanyForm({
       name: company.name,
-      email: company.email || '',
+      email: company.email || "",
       account_status: company.account_status,
       subscription_plan: company.subscription_plan,
       subscription_status: company.subscription_status,
       subscription_started_at: dateInput(company.subscription_started_at),
       subscription_expires_at: dateInput(company.subscription_expires_at),
-      suspension_reason: company.suspension_reason || '',
+      suspension_reason: company.suspension_reason || "",
       monthly_lead_quota: company.monthly_lead_quota || 0,
       daily_lead_limit: company.daily_lead_limit || 0,
       is_bot_activated: company.is_bot_activated !== false,
       social_reply_enabled: company.social_reply_enabled !== false,
-      timezone: company.timezone || 'Africa/Lagos',
-    })
-  }
+      timezone: company.timezone || "Africa/Lagos",
+    });
+  };
 
   const extendExpiry = (days: number) => {
-    if (!companyForm) return
+    if (!companyForm) return;
     const base = companyForm.subscription_expires_at
       ? new Date(companyForm.subscription_expires_at)
-      : new Date()
-    base.setDate(base.getDate() + days)
+      : new Date();
+    base.setDate(base.getDate() + days);
     setCompanyForm({
       ...companyForm,
       subscription_expires_at: dateInput(base.toISOString()),
-    })
-  }
+    });
+  };
+
+  const applyAccessWindow = async (days: 7 | 30) => {
+    if (!selectedCompany) return;
+    const label = days === 7 ? "7-day trial" : "30-day access period";
+    if (
+      !window.confirm(`Start a fresh ${label} for ${selectedCompany.name}?`)
+    ) {
+      return;
+    }
+    setBusy(`company-${selectedCompany.id}`);
+    try {
+      await request(`/companies/${selectedCompany.id}/access-window`, {
+        method: "POST",
+        body: JSON.stringify({ days }),
+      });
+      setSelectedCompany(null);
+      setCompanyForm(null);
+      await loadAll(secret);
+      flash(`${label} started. The customer dashboard countdown is now live.`);
+    } catch (error) {
+      flash(
+        error instanceof Error ? error.message : "Could not update access.",
+        "error",
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runCompanyAction = async (
+    action: "revoke-sessions" | "disconnect-whatsapp" | "reindex-properties",
+    prompt: string,
+    success: string,
+  ) => {
+    if (!selectedCompany || !window.confirm(prompt)) return;
+    setBusy(`company-${selectedCompany.id}`);
+    try {
+      await request(`/companies/${selectedCompany.id}/${action}`, {
+        method: "POST",
+      });
+      await loadAll(secret);
+      flash(success);
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Action failed.", "error");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const saveCompany = async () => {
-    if (!selectedCompany || !companyForm) return
+    if (!selectedCompany || !companyForm) return;
     if (
-      companyForm.account_status === 'suspended' &&
-      selectedCompany.account_status !== 'suspended' &&
+      companyForm.account_status === "suspended" &&
+      selectedCompany.account_status !== "suspended" &&
       !window.confirm(
         `Suspend ${selectedCompany.name}? All current user sessions will stop working.`,
       )
     ) {
-      return
+      return;
     }
-    setBusy(`company-${selectedCompany.id}`)
+    setBusy(`company-${selectedCompany.id}`);
     try {
       await request(`/companies/${selectedCompany.id}`, {
-        method: 'PATCH',
+        method: "PATCH",
         body: JSON.stringify({
           ...companyForm,
           email: companyForm.email || null,
@@ -342,48 +390,48 @@ export default function AdminPage() {
             : null,
           suspension_reason: companyForm.suspension_reason || null,
         }),
-      })
-      setSelectedCompany(null)
-      setCompanyForm(null)
-      await loadAll(secret)
-      flash('Company settings saved and access rules applied.')
+      });
+      setSelectedCompany(null);
+      setCompanyForm(null);
+      await loadAll(secret);
+      flash("Company settings saved and access rules applied.");
     } catch (error) {
       flash(
-        error instanceof Error ? error.message : 'Could not save company.',
-        'error',
-      )
+        error instanceof Error ? error.message : "Could not save company.",
+        "error",
+      );
     } finally {
-      setBusy(null)
+      setBusy(null);
     }
-  }
+  };
 
   const updateUser = async (user: AdminUser, changes: Partial<AdminUser>) => {
     if (
       changes.status &&
-      ['suspended', 'revoked'].includes(changes.status) &&
+      ["suspended", "revoked"].includes(changes.status) &&
       !window.confirm(
-        `${changes.status === 'suspended' ? 'Suspend' : 'Revoke'} access for ${user.full_name || user.phone}?`,
+        `${changes.status === "suspended" ? "Suspend" : "Revoke"} access for ${user.full_name || user.phone}?`,
       )
     ) {
-      return
+      return;
     }
-    setBusy(`user-${user.id}`)
+    setBusy(`user-${user.id}`);
     try {
       await request(`/users/${user.id}`, {
-        method: 'PATCH',
+        method: "PATCH",
         body: JSON.stringify(changes),
-      })
-      await loadAll(secret)
-      flash('User access updated.')
+      });
+      await loadAll(secret);
+      flash("User access updated.");
     } catch (error) {
       flash(
-        error instanceof Error ? error.message : 'Could not update user.',
-        'error',
-      )
+        error instanceof Error ? error.message : "Could not update user.",
+        "error",
+      );
     } finally {
-      setBusy(null)
+      setBusy(null);
     }
-  }
+  };
 
   const revokeSessions = async (user: AdminUser) => {
     if (
@@ -391,50 +439,51 @@ export default function AdminPage() {
         `Sign ${user.full_name || user.phone} out of every device?`,
       )
     )
-      return
-    setBusy(`user-${user.id}`)
+      return;
+    setBusy(`user-${user.id}`);
     try {
-      await request(`/users/${user.id}/revoke-sessions`, { method: 'POST' })
-      flash('All sessions revoked.')
+      await request(`/users/${user.id}/revoke-sessions`, { method: "POST" });
+      await loadAll(secret);
+      flash("All sessions revoked.");
     } catch (error) {
       flash(
-        error instanceof Error ? error.message : 'Could not revoke sessions.',
-        'error',
-      )
+        error instanceof Error ? error.message : "Could not revoke sessions.",
+        "error",
+      );
     } finally {
-      setBusy(null)
+      setBusy(null);
     }
-  }
+  };
 
   const filteredCompanies = useMemo(() => {
-    const term = search.trim().toLowerCase()
+    const term = search.trim().toLowerCase();
     return companies.filter((company) => {
       const matchesSearch =
         !term ||
         company.name.toLowerCase().includes(term) ||
         String(company.phone).includes(term) ||
-        company.email?.toLowerCase().includes(term)
+        company.email?.toLowerCase().includes(term);
       return (
         matchesSearch &&
-        (statusFilter === 'all' || company.account_status === statusFilter)
-      )
-    })
-  }, [companies, search, statusFilter])
+        (statusFilter === "all" || company.account_status === statusFilter)
+      );
+    });
+  }, [companies, search, statusFilter]);
 
   const filteredUsers = useMemo(() => {
-    const term = search.trim().toLowerCase()
+    const term = search.trim().toLowerCase();
     return users.filter((user) => {
       const matchesSearch =
         !term ||
         user.phone.includes(term) ||
         user.full_name?.toLowerCase().includes(term) ||
-        user.company.name.toLowerCase().includes(term)
+        user.company.name.toLowerCase().includes(term);
       return (
         matchesSearch &&
-        (statusFilter === 'all' || user.status === statusFilter)
-      )
-    })
-  }, [users, search, statusFilter])
+        (statusFilter === "all" || user.status === statusFilter)
+      );
+    });
+  }, [users, search, statusFilter]);
 
   if (!authed) {
     return (
@@ -454,7 +503,9 @@ export default function AdminPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-400">
                   GetChurnShield
                 </p>
-                <h1 className="text-xl font-bold sm:text-2xl">Admin control centre</h1>
+                <h1 className="text-xl font-bold sm:text-2xl">
+                  Admin control centre
+                </h1>
               </div>
             </div>
             <p className="mb-6 text-sm leading-relaxed text-slate-400">
@@ -472,7 +523,7 @@ export default function AdminPage() {
                 value={secret}
                 onChange={(event) => setSecret(event.target.value)}
                 onKeyDown={(event) =>
-                  event.key === 'Enter' && secret && loadAll(secret)
+                  event.key === "Enter" && secret && loadAll(secret)
                 }
                 className="h-12 w-full rounded-xl border border-white/10 bg-white/10 pl-10 pr-3 text-sm outline-none transition focus:border-emerald-400"
                 placeholder="Enter secret"
@@ -484,7 +535,7 @@ export default function AdminPage() {
               disabled={!secret || loading}
               className="mt-4 h-12 w-full rounded-xl bg-emerald-500 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
             >
-              {loading ? 'Verifying…' : 'Open dashboard'}
+              {loading ? "Verifying…" : "Open dashboard"}
             </button>
             {notice && (
               <p className="mt-4 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-sm text-red-300">
@@ -494,19 +545,19 @@ export default function AdminPage() {
           </div>
         </div>
       </main>
-    )
+    );
   }
 
   const maxMessages = Math.max(
     1,
     ...(overview?.daily_activity.map((point) => point.messages) || [1]),
-  )
+  );
   const nav: Array<{ id: Tab; label: string; icon: typeof Activity }> = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'companies', label: 'Companies', icon: Building2 },
-    { id: 'users', label: 'Users', icon: Users },
-    { id: 'audit', label: 'Audit log', icon: History },
-  ]
+    { id: "overview", label: "Overview", icon: LayoutDashboard },
+    { id: "companies", label: "Companies", icon: Building2 },
+    { id: "users", label: "Users", icon: Users },
+    { id: "audit", label: "Audit log", icon: History },
+  ];
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-900">
@@ -536,7 +587,7 @@ export default function AdminPage() {
               className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-300 hover:bg-white/10 hover:text-white"
             >
               <RefreshCw
-                className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
+                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
               />
             </button>
             <button
@@ -558,11 +609,11 @@ export default function AdminPage() {
               key={item.id}
               type="button"
               onClick={() => {
-                setTab(item.id)
-                setSearch('')
-                setStatusFilter('all')
+                setTab(item.id);
+                setSearch("");
+                setStatusFilter("all");
               }}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ${tab === item.id ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+              className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ${tab === item.id ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100"}`}
             >
               <item.icon className="h-4 w-4" /> {item.label}
             </button>
@@ -575,7 +626,7 @@ export default function AdminPage() {
         <section className="min-w-0 space-y-4 sm:space-y-6">
           {notice && (
             <div
-              className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm ${notice.kind === 'error' ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}
+              className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm ${notice.kind === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}
             >
               <span>{notice.text}</span>
               <button onClick={() => setNotice(null)}>
@@ -584,7 +635,7 @@ export default function AdminPage() {
             </div>
           )}
 
-          {tab === 'overview' && overview && (
+          {tab === "overview" && overview && (
             <>
               <div>
                 <p className="text-sm font-medium text-emerald-700">
@@ -731,14 +782,14 @@ export default function AdminPage() {
             </>
           )}
 
-          {(tab === 'companies' || tab === 'users') && (
+          {(tab === "companies" || tab === "users") && (
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-sm font-medium text-emerald-700">
                   Access and billing control
                 </p>
                 <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                  {tab === 'companies' ? 'Companies' : 'Users'}
+                  {tab === "companies" ? "Companies" : "Users"}
                 </h2>
               </div>
               <div className="grid grid-cols-1 gap-2 sm:flex">
@@ -759,102 +810,102 @@ export default function AdminPage() {
                   <option value="all">All statuses</option>
                   <option value="active">Active</option>
                   <option value="suspended">Suspended</option>
-                  {tab === 'users' && <option value="invited">Invited</option>}
-                  {tab === 'users' && <option value="revoked">Revoked</option>}
+                  {tab === "users" && <option value="invited">Invited</option>}
+                  {tab === "users" && <option value="revoked">Revoked</option>}
                 </select>
               </div>
             </div>
           )}
 
-          {tab === 'companies' && (
+          {tab === "companies" && (
             <>
               <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
                 <table className="w-full min-w-[1100px] text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Company</th>
-                    <th className="px-4 py-3">Access</th>
-                    <th className="px-4 py-3">Subscription</th>
-                    <th className="px-4 py-3">Usage</th>
-                    <th className="px-4 py-3">Assets</th>
-                    <th className="px-4 py-3">Connections</th>
-                    <th className="px-4 py-3">Last login</th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCompanies.map((company) => (
-                    <tr
-                      key={company.id}
-                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
-                    >
-                      <td className="px-4 py-4">
-                        <p className="font-semibold text-slate-950">
-                          {company.name}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          #{company.id} · {String(company.phone)}
-                        </p>
-                      </td>
-                      <td className="px-4 py-4">
-                        <StatusPill value={company.account_status} />
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <StatusPill value={company.subscription_status} />
-                          <span className="text-xs text-slate-500">
-                            {company.subscription_plan}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {company.subscription_expires_at
-                            ? `Ends ${new Date(company.subscription_expires_at).toLocaleDateString()}`
-                            : 'No expiry'}
-                        </p>
-                      </td>
-                      <td className="px-4 py-4">
-                        <p>
-                          {company.monthly_used} /{' '}
-                          {company.monthly_lead_quota || 0} leads
-                        </p>
-                        <p className="text-xs text-slate-400">
-                          {company.daily_used} / {company.daily_lead_limit || 0}{' '}
-                          today
-                        </p>
-                      </td>
-                      <td className="px-4 py-4 text-xs text-slate-600">
-                        {company._count.properties} properties
-                        <br />
-                        {company._count.company_assets} media ·{' '}
-                        {company._count.content_posts} posts
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-1 text-xs">
-                          {company.whatsapp_connection_status ? (
-                            <Wifi className="h-4 w-4 text-emerald-600" />
-                          ) : (
-                            <WifiOff className="h-4 w-4 text-slate-400" />
-                          )}{' '}
-                          {company._count.social_accounts} social
-                        </div>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {company._count.contacts} contacts
-                        </p>
-                      </td>
-                      <td className="px-4 py-4 text-xs text-slate-500">
-                        {dateLabel(company.last_login_at)}
-                      </td>
-                      <td className="px-4 py-4">
-                        <button
-                          onClick={() => openCompany(company)}
-                          className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-                        >
-                          Manage
-                        </button>
-                      </td>
+                  <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Company</th>
+                      <th className="px-4 py-3">Access</th>
+                      <th className="px-4 py-3">Subscription</th>
+                      <th className="px-4 py-3">Usage</th>
+                      <th className="px-4 py-3">Assets</th>
+                      <th className="px-4 py-3">Connections</th>
+                      <th className="px-4 py-3">Last login</th>
+                      <th className="px-4 py-3" />
                     </tr>
-                  ))}
-                </tbody>
+                  </thead>
+                  <tbody>
+                    {filteredCompanies.map((company) => (
+                      <tr
+                        key={company.id}
+                        className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70"
+                      >
+                        <td className="px-4 py-4">
+                          <p className="font-semibold text-slate-950">
+                            {company.name}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            #{company.id} · {String(company.phone)}
+                          </p>
+                        </td>
+                        <td className="px-4 py-4">
+                          <StatusPill value={company.account_status} />
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2">
+                            <StatusPill value={company.subscription_status} />
+                            <span className="text-xs text-slate-500">
+                              {company.subscription_plan}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {company.subscription_expires_at
+                              ? `Ends ${new Date(company.subscription_expires_at).toLocaleDateString()}`
+                              : "No expiry"}
+                          </p>
+                        </td>
+                        <td className="px-4 py-4">
+                          <p>
+                            {company.monthly_used} /{" "}
+                            {company.monthly_lead_quota || 0} leads
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {company.daily_used} /{" "}
+                            {company.daily_lead_limit || 0} today
+                          </p>
+                        </td>
+                        <td className="px-4 py-4 text-xs text-slate-600">
+                          {company._count.properties} properties
+                          <br />
+                          {company._count.company_assets} media ·{" "}
+                          {company._count.content_posts} posts
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-1 text-xs">
+                            {company.whatsapp_connection_status ? (
+                              <Wifi className="h-4 w-4 text-emerald-600" />
+                            ) : (
+                              <WifiOff className="h-4 w-4 text-slate-400" />
+                            )}{" "}
+                            {company._count.social_accounts} social
+                          </div>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {company._count.contacts} contacts
+                          </p>
+                        </td>
+                        <td className="px-4 py-4 text-xs text-slate-500">
+                          {dateLabel(company.last_login_at)}
+                        </td>
+                        <td className="px-4 py-4">
+                          <button
+                            onClick={() => openCompany(company)}
+                            className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                          >
+                            Manage
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               </div>
               <div className="space-y-3 md:hidden">
@@ -887,7 +938,8 @@ export default function AdminPage() {
                       <div className="rounded-xl bg-slate-50 p-3">
                         <p className="text-slate-400">Usage</p>
                         <p className="mt-1 font-bold text-slate-800">
-                          {company.monthly_used} / {company.monthly_lead_quota || 0}
+                          {company.monthly_used} /{" "}
+                          {company.monthly_lead_quota || 0}
                         </p>
                         <p className="text-slate-500">monthly leads</p>
                       </div>
@@ -927,100 +979,101 @@ export default function AdminPage() {
             </>
           )}
 
-          {tab === 'users' && (
+          {tab === "users" && (
             <>
               <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
                 <table className="w-full min-w-[1000px] text-left text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">User</th>
-                    <th className="px-4 py-3">Company</th>
-                    <th className="px-4 py-3">Role</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Phone access</th>
-                    <th className="px-4 py-3">Last login</th>
-                    <th className="px-4 py-3">Security</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((user) => (
-                    <tr
-                      key={user.id}
-                      className="border-b border-slate-100 last:border-0"
-                    >
-                      <td className="px-4 py-4">
-                        <p className="font-semibold">
-                          {user.full_name || 'Unnamed user'}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {user.phone} · #{user.id}
-                        </p>
-                      </td>
-                      <td className="px-4 py-4">
-                        <p>{user.company.name}</p>
-                        <StatusPill value={user.company.account_status} />
-                      </td>
-                      <td className="px-4 py-4">
-                        <select
-                          value={user.role}
-                          disabled={busy === `user-${user.id}`}
-                          onChange={(event) =>
-                            updateUser(user, {
-                              role: event.target.value as AdminUser['role'],
-                            })
-                          }
-                          className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs capitalize"
-                        >
-                          <option value="owner">Owner</option>
-                          <option value="manager">Manager</option>
-                          <option value="agent">Agent</option>
-                        </select>
-                      </td>
-                      <td className="px-4 py-4">
-                        <select
-                          value={user.status}
-                          disabled={busy === `user-${user.id}`}
-                          onChange={(event) =>
-                            updateUser(user, {
-                              status: event.target.value as AdminUser['status'],
-                            })
-                          }
-                          className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs capitalize"
-                        >
-                          <option value="active">Active</option>
-                          <option value="invited">Invited</option>
-                          <option value="suspended">Suspended</option>
-                          <option value="revoked">Revoked</option>
-                        </select>
-                      </td>
-                      <td className="px-4 py-4">
-                        <button
-                          onClick={() =>
-                            updateUser(user, {
-                              can_view_contact_phone:
-                                !user.can_view_contact_phone,
-                            })
-                          }
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${user.can_view_contact_phone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
-                        >
-                          {user.can_view_contact_phone ? 'Allowed' : 'Hidden'}
-                        </button>
-                      </td>
-                      <td className="px-4 py-4 text-xs text-slate-500">
-                        {dateLabel(user.last_login_at)}
-                      </td>
-                      <td className="px-4 py-4">
-                        <button
-                          onClick={() => revokeSessions(user)}
-                          disabled={busy === `user-${user.id}`}
-                          className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100"
-                        >
-                          <KeyRound className="h-3.5 w-3.5" /> Revoke sessions
-                        </button>
-                      </td>
+                  <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">User</th>
+                      <th className="px-4 py-3">Company</th>
+                      <th className="px-4 py-3">Role</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Phone access</th>
+                      <th className="px-4 py-3">Last login</th>
+                      <th className="px-4 py-3">Security</th>
                     </tr>
-                  ))}
-                </tbody>
+                  </thead>
+                  <tbody>
+                    {filteredUsers.map((user) => (
+                      <tr
+                        key={user.id}
+                        className="border-b border-slate-100 last:border-0"
+                      >
+                        <td className="px-4 py-4">
+                          <p className="font-semibold">
+                            {user.full_name || "Unnamed user"}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {user.phone} · #{user.id}
+                          </p>
+                        </td>
+                        <td className="px-4 py-4">
+                          <p>{user.company.name}</p>
+                          <StatusPill value={user.company.account_status} />
+                        </td>
+                        <td className="px-4 py-4">
+                          <select
+                            value={user.role}
+                            disabled={busy === `user-${user.id}`}
+                            onChange={(event) =>
+                              updateUser(user, {
+                                role: event.target.value as AdminUser["role"],
+                              })
+                            }
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs capitalize"
+                          >
+                            <option value="owner">Owner</option>
+                            <option value="manager">Manager</option>
+                            <option value="agent">Agent</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-4">
+                          <select
+                            value={user.status}
+                            disabled={busy === `user-${user.id}`}
+                            onChange={(event) =>
+                              updateUser(user, {
+                                status: event.target
+                                  .value as AdminUser["status"],
+                              })
+                            }
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs capitalize"
+                          >
+                            <option value="active">Active</option>
+                            <option value="invited">Invited</option>
+                            <option value="suspended">Suspended</option>
+                            <option value="revoked">Revoked</option>
+                          </select>
+                        </td>
+                        <td className="px-4 py-4">
+                          <button
+                            onClick={() =>
+                              updateUser(user, {
+                                can_view_contact_phone:
+                                  !user.can_view_contact_phone,
+                              })
+                            }
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${user.can_view_contact_phone ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+                          >
+                            {user.can_view_contact_phone ? "Allowed" : "Hidden"}
+                          </button>
+                        </td>
+                        <td className="px-4 py-4 text-xs text-slate-500">
+                          {dateLabel(user.last_login_at)}
+                        </td>
+                        <td className="px-4 py-4">
+                          <button
+                            onClick={() => revokeSessions(user)}
+                            disabled={busy === `user-${user.id}`}
+                            className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                          >
+                            <KeyRound className="h-3.5 w-3.5" /> Revoke sessions
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               </div>
               <div className="space-y-3 md:hidden">
@@ -1032,7 +1085,7 @@ export default function AdminPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h3 className="truncate font-bold text-slate-950">
-                          {user.full_name || 'Unnamed user'}
+                          {user.full_name || "Unnamed user"}
                         </h3>
                         <p className="mt-0.5 truncate text-xs text-slate-500">
                           {user.phone} · #{user.id}
@@ -1057,7 +1110,7 @@ export default function AdminPage() {
                           disabled={busy === `user-${user.id}`}
                           onChange={(event) =>
                             updateUser(user, {
-                              role: event.target.value as AdminUser['role'],
+                              role: event.target.value as AdminUser["role"],
                             })
                           }
                           className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm capitalize"
@@ -1074,7 +1127,7 @@ export default function AdminPage() {
                           disabled={busy === `user-${user.id}`}
                           onChange={(event) =>
                             updateUser(user, {
-                              status: event.target.value as AdminUser['status'],
+                              status: event.target.value as AdminUser["status"],
                             })
                           }
                           className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm capitalize"
@@ -1090,13 +1143,15 @@ export default function AdminPage() {
                       <button
                         onClick={() =>
                           updateUser(user, {
-                            can_view_contact_phone: !user.can_view_contact_phone,
+                            can_view_contact_phone:
+                              !user.can_view_contact_phone,
                           })
                         }
                         disabled={busy === `user-${user.id}`}
-                        className={`min-h-11 rounded-xl px-3 text-xs font-semibold ${user.can_view_contact_phone ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}
+                        className={`min-h-11 rounded-xl px-3 text-xs font-semibold ${user.can_view_contact_phone ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
                       >
-                        Phone: {user.can_view_contact_phone ? 'Allowed' : 'Hidden'}
+                        Phone:{" "}
+                        {user.can_view_contact_phone ? "Allowed" : "Hidden"}
                       </button>
                       <button
                         onClick={() => revokeSessions(user)}
@@ -1120,7 +1175,7 @@ export default function AdminPage() {
             </>
           )}
 
-          {tab === 'audit' && (
+          {tab === "audit" && (
             <>
               <div>
                 <p className="text-sm font-medium text-emerald-700">
@@ -1161,17 +1216,17 @@ export default function AdminPage() {
                           <StatusPill value={row.action} />
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500">
-                          {row.entity || 'system'}{' '}
-                          {row.entity_id ? `#${row.entity_id}` : ''}
+                          {row.entity || "system"}{" "}
+                          {row.entity_id ? `#${row.entity_id}` : ""}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                          {row.ip || '—'}
+                          {row.ip || "—"}
                         </td>
                         <td
                           className="max-w-sm truncate px-4 py-3 font-mono text-[11px] text-slate-400"
-                          title={row.meta ? JSON.stringify(row.meta) : ''}
+                          title={row.meta ? JSON.stringify(row.meta) : ""}
                         >
-                          {row.meta ? JSON.stringify(row.meta) : '—'}
+                          {row.meta ? JSON.stringify(row.meta) : "—"}
                         </td>
                       </tr>
                     ))}
@@ -1199,14 +1254,14 @@ export default function AdminPage() {
                       <div>
                         <p className="text-slate-400">Target</p>
                         <p className="mt-1 font-medium text-slate-700">
-                          {row.entity || 'system'}{' '}
-                          {row.entity_id ? `#${row.entity_id}` : ''}
+                          {row.entity || "system"}{" "}
+                          {row.entity_id ? `#${row.entity_id}` : ""}
                         </p>
                       </div>
                       <div>
                         <p className="text-slate-400">IP address</p>
                         <p className="mt-1 truncate font-mono text-slate-700">
-                          {row.ip || '—'}
+                          {row.ip || "—"}
                         </p>
                       </div>
                     </div>
@@ -1236,7 +1291,7 @@ export default function AdminPage() {
       <nav
         aria-label="Admin sections"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-2 pt-2 shadow-[0_-10px_30px_rgba(15,23,42,0.1)] backdrop-blur lg:hidden"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)' }}
+        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.5rem)" }}
       >
         <div className="mx-auto grid max-w-lg grid-cols-4 gap-1">
           {nav.map((item) => (
@@ -1244,13 +1299,13 @@ export default function AdminPage() {
               key={item.id}
               type="button"
               onClick={() => {
-                setTab(item.id)
-                setSearch('')
-                setStatusFilter('all')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
+                setTab(item.id);
+                setSearch("");
+                setStatusFilter("all");
+                window.scrollTo({ top: 0, behavior: "smooth" });
               }}
-              aria-current={tab === item.id ? 'page' : undefined}
-              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-semibold transition ${tab === item.id ? 'bg-slate-950 text-white' : 'text-slate-500'}`}
+              aria-current={tab === item.id ? "page" : undefined}
+              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-semibold transition ${tab === item.id ? "bg-slate-950 text-white" : "text-slate-500"}`}
             >
               <item.icon className="h-5 w-5" />
               <span>{item.label}</span>
@@ -1347,7 +1402,7 @@ export default function AdminPage() {
                           suspension_reason: event.target.value,
                         })
                       }
-                      disabled={companyForm.account_status !== 'suspended'}
+                      disabled={companyForm.account_status !== "suspended"}
                       className="mt-2 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm font-normal disabled:bg-slate-100"
                       placeholder="Required context for your team"
                     />
@@ -1426,16 +1481,18 @@ export default function AdminPage() {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
-                    onClick={() => extendExpiry(7)}
+                    onClick={() => applyAccessWindow(7)}
+                    disabled={busy === `company-${selectedCompany.id}`}
                     className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700"
                   >
-                    +7 days
+                    Start 7-day trial
                   </button>
                   <button
-                    onClick={() => extendExpiry(30)}
+                    onClick={() => applyAccessWindow(30)}
+                    disabled={busy === `company-${selectedCompany.id}`}
                     className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700"
                   >
-                    +30 days
+                    Start 30-day access
                   </button>
                   <button
                     onClick={() => extendExpiry(90)}
@@ -1447,7 +1504,7 @@ export default function AdminPage() {
                     onClick={() =>
                       setCompanyForm({
                         ...companyForm,
-                        subscription_expires_at: '',
+                        subscription_expires_at: "",
                       })
                     }
                     className="rounded-lg px-3 py-2 text-xs font-semibold text-slate-500"
@@ -1511,7 +1568,7 @@ export default function AdminPage() {
                       is_bot_activated: !companyForm.is_bot_activated,
                     })
                   }
-                  className={`flex items-center justify-between rounded-xl border p-4 text-left ${companyForm.is_bot_activated ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}
+                  className={`flex items-center justify-between rounded-xl border p-4 text-left ${companyForm.is_bot_activated ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}
                 >
                   <span className="flex items-center gap-2 font-semibold">
                     <Bot className="h-4 w-4" /> WhatsApp AI bot
@@ -1529,7 +1586,7 @@ export default function AdminPage() {
                       social_reply_enabled: !companyForm.social_reply_enabled,
                     })
                   }
-                  className={`flex items-center justify-between rounded-xl border p-4 text-left ${companyForm.social_reply_enabled ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}
+                  className={`flex items-center justify-between rounded-xl border p-4 text-left ${companyForm.social_reply_enabled ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}
                 >
                   <span className="flex items-center gap-2 font-semibold">
                     <MessageSquare className="h-4 w-4" /> Social auto-replies
@@ -1540,6 +1597,60 @@ export default function AdminPage() {
                     <Ban className="h-5 w-5 text-slate-400" />
                   )}
                 </button>
+              </div>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5 text-amber-700" />
+                  <div>
+                    <h4 className="font-bold">Master workspace actions</h4>
+                    <p className="text-xs text-slate-500">
+                      These commands are enforced by the customer API, not only
+                      this screen.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <button
+                    onClick={() =>
+                      runCompanyAction(
+                        "revoke-sessions",
+                        `Sign every user in ${selectedCompany.name} out of all devices?`,
+                        "Every workspace user has been signed out.",
+                      )
+                    }
+                    disabled={busy === `company-${selectedCompany.id}`}
+                    className="min-h-11 rounded-xl border border-amber-200 bg-white px-3 text-xs font-semibold text-amber-800 disabled:opacity-50"
+                  >
+                    Revoke all logins
+                  </button>
+                  <button
+                    onClick={() =>
+                      runCompanyAction(
+                        "disconnect-whatsapp",
+                        `Disconnect ${selectedCompany.name}'s WhatsApp session? They will need to reconnect it.`,
+                        "WhatsApp session disconnected.",
+                      )
+                    }
+                    disabled={busy === `company-${selectedCompany.id}`}
+                    className="min-h-11 rounded-xl border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 disabled:opacity-50"
+                  >
+                    Disconnect WhatsApp
+                  </button>
+                  <button
+                    onClick={() =>
+                      runCompanyAction(
+                        "reindex-properties",
+                        `Re-index every PDF and reconcile duplicate properties for ${selectedCompany.name}?`,
+                        "Property reconciliation completed and PDF re-indexing queued.",
+                      )
+                    }
+                    disabled={busy === `company-${selectedCompany.id}`}
+                    className="min-h-11 rounded-xl border border-indigo-200 bg-white px-3 text-xs font-semibold text-indigo-700 disabled:opacity-50"
+                  >
+                    Re-index property library
+                  </button>
+                </div>
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1553,7 +1664,7 @@ export default function AdminPage() {
                       <div key={key} className="rounded-lg bg-white p-2">
                         <p className="text-lg font-bold">{value}</p>
                         <p className="truncate capitalize text-slate-400">
-                          {key.replaceAll('_', ' ')}
+                          {key.replaceAll("_", " ")}
                         </p>
                       </div>
                     ),
@@ -1563,7 +1674,9 @@ export default function AdminPage() {
             </div>
             <div
               className="sticky bottom-0 grid grid-cols-2 gap-2 border-t border-slate-200 bg-white px-4 pt-3 sm:flex sm:items-center sm:justify-end sm:gap-3 sm:px-6 sm:py-4"
-              style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0.75rem)' }}
+              style={{
+                paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)",
+              }}
             >
               <button
                 onClick={() => setSelectedCompany(null)}
@@ -1576,12 +1689,12 @@ export default function AdminPage() {
                 disabled={busy === `company-${selectedCompany.id}`}
                 className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white disabled:opacity-50 sm:min-h-0 sm:px-5 sm:py-2.5"
               >
-                <Save className="h-4 w-4" /> {busy ? 'Saving…' : 'Save changes'}
+                <Save className="h-4 w-4" /> {busy ? "Saving…" : "Save changes"}
               </button>
             </div>
           </div>
         </div>
       )}
     </main>
-  )
+  );
 }

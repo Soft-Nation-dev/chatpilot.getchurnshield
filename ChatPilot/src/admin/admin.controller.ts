@@ -71,6 +71,43 @@ export class AdminController {
     return this.adminService.revokeUserSessions(userId, req.ip)
   }
 
+  @Post('companies/:companyId/access-window')
+  setAccessWindow(
+    @Request() req: any,
+    @Param('companyId', ParseIntPipe) companyId: number,
+    @Body() body: { days?: number },
+  ) {
+    return this.adminService.setAccessWindow(
+      companyId,
+      Number(body?.days),
+      req.ip,
+    )
+  }
+
+  @Post('companies/:companyId/revoke-sessions')
+  revokeCompanySessions(
+    @Request() req: any,
+    @Param('companyId', ParseIntPipe) companyId: number,
+  ) {
+    return this.adminService.revokeCompanySessions(companyId, req.ip)
+  }
+
+  @Post('companies/:companyId/disconnect-whatsapp')
+  disconnectWhatsapp(
+    @Request() req: any,
+    @Param('companyId', ParseIntPipe) companyId: number,
+  ) {
+    return this.adminService.disconnectWhatsapp(companyId, req.ip)
+  }
+
+  @Post('companies/:companyId/reindex-properties')
+  reindexProperties(
+    @Request() req: any,
+    @Param('companyId', ParseIntPipe) companyId: number,
+  ) {
+    return this.adminService.reindexPropertyLibrary(companyId, req.ip)
+  }
+
   @Get('audit')
   audit(@Query('take') take?: string) {
     return this.adminService.auditLog(Number(take) || 100)

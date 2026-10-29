@@ -32,6 +32,7 @@ type ExtractedProperty = {
   payment_plan?: string | null
   features?: string | null
   status?: string | null
+  image_indices?: number[] | null
 }
 
 @Injectable()
@@ -113,16 +114,25 @@ export class MediaIntelligenceService {
 
     const minReuseDays = Number(process.env.MEDIA_MIN_REUSE_DAYS || 14)
     const cutoff = addDays(new Date(), -Math.max(1, minReuseDays))
-    const recent = await this.prisma.content_posts.findMany({
+    const mediaHistory = await this.prisma.content_posts.findMany({
       where: {
         company_id: companyId,
-        created_at: { gte: cutoff },
         image_urls: { not: null },
       },
-      select: { image_urls: true },
+      orderBy: { created_at: 'desc' },
+      take: 2000,
+      select: { image_urls: true, created_at: true },
     })
+    const lastUsedByUrl = new Map<string, Date>()
+    for (const row of mediaHistory) {
+      for (const url of this.urls(row.image_urls)) {
+        if (!lastUsedByUrl.has(url)) lastUsedByUrl.set(url, row.created_at)
+      }
+    }
     const recentlyUsed = new Set(
-      recent.flatMap(row => this.urls(row.image_urls)),
+      [...lastUsedByUrl.entries()]
+        .filter(([, usedAt]) => usedAt.getTime() >= cutoff.getTime())
+        .map(([url]) => url),
     )
     const fresh = unique.filter(item => !recentlyUsed.has(item.url))
     const pool = fresh.length ? fresh : unique
@@ -147,6 +157,15 @@ export class MediaIntelligenceService {
       if (!item.lastUsedAt) {
         score += 25
       }
+      const recordedUse = lastUsedByUrl.get(item.url)
+      if (!recordedUse) {
+        score += 40
+      } else {
+        score += Math.min(
+          40,
+          Math.max(0, (Date.now() - recordedUse.getTime()) / 86400000),
+        )
+      }
       if (input.property && item.source === `property:${input.property.id}`) {
         score += 80
       }
@@ -159,6 +178,7 @@ export class MediaIntelligenceService {
         0,
         15 - (Date.now() - item.createdAt.getTime()) / 86400000,
       )
+      score += Math.random() * 2
       return { item, score }
     })
     scored.sort(
@@ -291,7 +311,6 @@ export class MediaIntelligenceService {
         )
       }
     }
-    await this.refreshDocumentPropertyMedia(companyId)
     indexed += await this.indexDocumentParents(companyId)
     if (indexed) {
       await this.notifications.create({
@@ -320,18 +339,16 @@ export class MediaIntelligenceService {
     }
 
     const documentText = await this.extractPdfText(document.file_url)
-    const documentImages = documentText
-      ? []
-      : await this.prisma.company_assets.findMany({
-          where: {
-            company_id: document.company_id,
-            source: 'document-extract',
-            source_ref: String(document.id),
-            file_type: 'image',
-          },
-          orderBy: { created_at: 'asc' },
-          take: 4,
-        })
+    const documentImages = await this.prisma.company_assets.findMany({
+      where: {
+        company_id: document.company_id,
+        source: 'document-extract',
+        source_ref: String(document.id),
+        file_type: 'image',
+      },
+      orderBy: { created_at: 'asc' },
+      take: 8,
+    })
 
     // Cloudflare Workers AI does not accept application/pdf file parts. For
     // scanned brochures, use the page/embedded images extracted at upload
@@ -343,43 +360,40 @@ export class MediaIntelligenceService {
     }
 
     const result = await this.aiRouting.generate({
-      workload: documentText ? AiWorkload.Content : AiWorkload.MediaIndex,
+      workload: documentImages.length
+        ? AiWorkload.MediaIndex
+        : AiWorkload.Content,
       companyId: document.company_id,
       system:
-        'Extract only explicitly stated real-estate listings from the supplied brochure text or images. Never infer or invent a price, location, title document, availability, room count, or feature. Return strict JSON only: {"properties":[{"title":"","description":null,"property_type":null,"location":null,"state":null,"price":null,"price_max":null,"currency":"NGN","size_sqm":null,"bedrooms":null,"bathrooms":null,"title_document":null,"payment_plan":null,"features":null,"status":"available|reserved|sold|hidden"}]}. Use numeric naira values without commas. Omit brochures that contain no identifiable property listings by returning an empty properties array. Keep each description factual and under 600 characters.',
-      messages: documentText
-        ? [
+        'Extract only explicitly stated real-estate listings from the supplied brochure text and numbered images. Never infer or invent a price, location, title document, availability, room count, feature, or image relationship. Return strict JSON only: {"properties":[{"title":"","description":null,"property_type":null,"location":null,"state":null,"price":null,"price_max":null,"currency":"NGN","size_sqm":null,"bedrooms":null,"bathrooms":null,"title_document":null,"payment_plan":null,"features":null,"status":"available|reserved|sold|hidden","image_indices":[1]}]}. image_indices must contain only the 1-based numbers of images that visibly belong to that exact listing. Do not assign logos, generic covers, maps, or another listing\'s picture. Leave image_indices empty when uncertain. Use numeric naira values without commas. Omit brochures that contain no identifiable property listings by returning an empty properties array. Keep each description factual and under 600 characters.',
+      messages: [
+        {
+          role: 'user',
+          content: [
             {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `Extract the distinct property listings in ${document.file_name}. Existing description: ${document.description || 'none'}\n\nPDF text:\n${documentText}`,
-                },
-              ],
+              type: 'text',
+              text: `Extract the distinct property listings in ${document.file_name}. Existing description: ${document.description || 'none'}${documentText ? `\n\nPDF text:\n${documentText}` : ''}\n\n${documentImages.length ? `There are ${documentImages.length} numbered extracted images below. Map each listing only to its own images.` : 'No extracted images are available.'}`,
             },
-          ]
-        : [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `Extract the distinct property listings visible in these images from ${document.file_name}. Existing description: ${document.description || 'none'}`,
-                },
-                ...documentImages.map(asset => ({
-                  type: 'file' as const,
-                  data: new URL(asset.file_url),
-                  mediaType: asset.mime_type || 'image/jpeg',
-                })),
-              ],
-            },
+            ...documentImages.flatMap((asset, index) => [
+              {
+                type: 'text' as const,
+                text: `Image ${index + 1}: ${asset.file_name}`,
+              },
+              {
+                type: 'file' as const,
+                data: new URL(asset.file_url),
+                mediaType: asset.mime_type || 'image/jpeg',
+              },
+            ]),
           ],
+        },
+      ],
       maxOutputTokens: 2200,
       temperature: 0.1,
     })
     const extracted = this.parseDocumentProperties(result.text)
     const saved = await this.saveDocumentProperties(document, extracted)
+    await this.reconcileCompanyProperties(document.company_id)
     await this.completeDocumentIndex(document, saved, notify)
     return saved
   }
@@ -439,29 +453,30 @@ export class MediaIntelligenceService {
       const title = this.cleanText(property.title, 200)
       if (!title) continue
       const location = this.cleanText(property.location, 120)
-      const fingerprint = createHash('sha256')
-        .update(`${this.normalized(title)}|${this.normalized(location || '')}`)
-        .digest('hex')
-      const duplicate = current.find(
-        item =>
-          this.normalized(item.title) === this.normalized(title) &&
-          (!location ||
-            !item.location ||
-            this.normalized(item.location) === this.normalized(location)),
+      const fingerprint = this.propertyFingerprint({
+        ...property,
+        title,
+        location,
+      })
+      const duplicate = current.find(item =>
+        this.isDuplicateProperty(item, { ...property, title, location }),
       )
       const images = this.imagesForExtractedProperty(
         property,
         children,
-        extracted.length,
       )
       if (duplicate) {
-        const mergedImages = [
-          ...new Set([...this.urls(duplicate.image_urls), ...images]),
-        ]
+        const sameDocument = duplicate.source_asset_id === document.id
+        const mergedImages = sameDocument
+          ? images
+          : [...new Set([...this.urls(duplicate.image_urls), ...images])]
         await this.prisma.properties.update({
           where: { id: duplicate.id },
           data: {
-            description: duplicate.description || property.description || null,
+            description: this.richerText(
+              duplicate.description,
+              this.cleanText(property.description, 3000),
+            ),
             property_type:
               duplicate.property_type || property.property_type || null,
             location: duplicate.location || location || null,
@@ -479,7 +494,10 @@ export class MediaIntelligenceService {
             features: duplicate.features || property.features || null,
             image_urls: mergedImages.length
               ? mergedImages.slice(0, 10).join(',')
-              : duplicate.image_urls,
+              : sameDocument
+                ? null
+                : duplicate.image_urls,
+            source_fingerprint: duplicate.source_fingerprint || fingerprint,
           },
         })
         saved++
@@ -514,48 +532,6 @@ export class MediaIntelligenceService {
     return saved
   }
 
-  private async refreshDocumentPropertyMedia(companyId: number) {
-    const properties = await this.prisma.properties.findMany({
-      where: { company_id: companyId, source_asset_id: { not: null } },
-    })
-    const groups = new Map<number, typeof properties>()
-    for (const property of properties) {
-      if (!property.source_asset_id) continue
-      const group = groups.get(property.source_asset_id) || []
-      group.push(property)
-      groups.set(property.source_asset_id, group)
-    }
-    for (const [assetId, group] of groups) {
-      const children = await this.prisma.company_assets.findMany({
-        where: {
-          company_id: companyId,
-          source: 'document-extract',
-          source_ref: String(assetId),
-          file_type: 'image',
-        },
-      })
-      for (const property of group) {
-        const selected = this.imagesForExtractedProperty(
-          {
-            title: property.title,
-            location: property.location,
-            property_type: property.property_type,
-          },
-          children,
-          group.length,
-        )
-        const merged = [
-          ...new Set([...this.urls(property.image_urls), ...selected]),
-        ].slice(0, 10)
-        if (merged.join(',') === (property.image_urls || '')) continue
-        await this.prisma.properties.update({
-          where: { id: property.id },
-          data: { image_urls: merged.length ? merged.join(',') : null },
-        })
-      }
-    }
-  }
-
   private imagesForExtractedProperty(
     property: ExtractedProperty,
     children: Array<{
@@ -565,18 +541,37 @@ export class MediaIntelligenceService {
       ai_summary: string | null
       ai_tags: string | null
     }>,
-    propertyCount: number,
   ): string[] {
-    if (propertyCount === 1) return children.map(child => child.file_url)
+    const explicit = Array.isArray(property.image_indices)
+      ? [
+          ...new Set(
+            property.image_indices
+              .map(value => Math.floor(Number(value)))
+              .filter(value => value >= 1 && value <= children.length),
+          ),
+        ].map(value => children[value - 1].file_url)
+      : []
+    if (explicit.length) return explicit
+    const genericTokens = new Set([
+      'apartment',
+      'bedroom',
+      'brochure',
+      'detached',
+      'duplex',
+      'fully',
+      'house',
+      'image',
+      'property',
+    ])
     const tokens = new Set(
       [property.title, property.location, property.property_type]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
         .split(/[^a-z0-9]+/)
-        .filter(token => token.length > 3),
+        .filter(token => token.length > 3 && !genericTokens.has(token)),
     )
-    return children
+    const scored = children
       .map(child => {
         const text = [
           child.file_name,
@@ -590,9 +585,81 @@ export class MediaIntelligenceService {
         const score = [...tokens].filter(token => text.includes(token)).length
         return { url: child.file_url, score }
       })
-      .filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score)
+    const bestScore = scored[0]?.score || 0
+    const matched = scored
+      .filter(item => bestScore >= 2 && item.score === bestScore)
       .map(item => item.url)
+    if (matched.length) return matched
+
+    // PDF object order is not reliably page order. If neither the model nor
+    // indexed media metadata establishes the relationship, keep the image
+    // unassigned rather than coupling a listing to the wrong photograph.
+    return []
+  }
+
+  async reconcileCompanyProperties(companyId: number): Promise<number> {
+    const properties = await this.prisma.properties.findMany({
+      where: { company_id: companyId },
+      orderBy: { id: 'asc' },
+    })
+    const keepers: typeof properties = []
+    let removed = 0
+
+    for (const candidate of properties) {
+      const keeper = keepers.find(item =>
+        this.isDuplicateProperty(item, candidate),
+      )
+      if (!keeper) {
+        keepers.push(candidate)
+        continue
+      }
+
+      const mergedImages = [
+        ...new Set([
+          ...this.urls(keeper.image_urls),
+          ...this.urls(candidate.image_urls),
+        ]),
+      ].slice(0, 10)
+      const merged = {
+        description: this.richerText(keeper.description, candidate.description),
+        property_type: keeper.property_type || candidate.property_type,
+        location: keeper.location || candidate.location,
+        state: keeper.state || candidate.state,
+        price: keeper.price || candidate.price,
+        price_max: keeper.price_max || candidate.price_max,
+        size_sqm: keeper.size_sqm || candidate.size_sqm,
+        bedrooms: keeper.bedrooms || candidate.bedrooms,
+        bathrooms: keeper.bathrooms || candidate.bathrooms,
+        title_document: keeper.title_document || candidate.title_document,
+        payment_plan: this.richerText(
+          keeper.payment_plan,
+          candidate.payment_plan,
+        ),
+        features: this.richerText(keeper.features, candidate.features),
+        image_urls: mergedImages.length ? mergedImages.join(',') : null,
+        video_url: keeper.video_url || candidate.video_url,
+        source_fingerprint:
+          keeper.source_fingerprint ||
+          candidate.source_fingerprint ||
+          this.propertyFingerprint(keeper),
+      }
+
+      await this.prisma.$transaction([
+        this.prisma.content_posts.updateMany({
+          where: { property_id: candidate.id },
+          data: { property_id: keeper.id },
+        }),
+        this.prisma.properties.update({
+          where: { id: keeper.id },
+          data: merged,
+        }),
+        this.prisma.properties.delete({ where: { id: candidate.id } }),
+      ])
+      Object.assign(keeper, merged)
+      removed++
+    }
+    return removed
   }
 
   private parseDocumentProperties(raw: string): ExtractedProperty[] {
@@ -644,7 +711,10 @@ export class MediaIntelligenceService {
   private samplePdfText(text: string, limit: number): string {
     if (text.length <= limit) return text
     const sampleSize = Math.floor(limit / 3)
-    const middleStart = Math.max(0, Math.floor(text.length / 2 - sampleSize / 2))
+    const middleStart = Math.max(
+      0,
+      Math.floor(text.length / 2 - sampleSize / 2),
+    )
     return [
       text.slice(0, sampleSize),
       text.slice(middleStart, middleStart + sampleSize),
@@ -683,6 +753,147 @@ export class MediaIntelligenceService {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, ' ')
       .trim()
+  }
+
+  private propertyFingerprint(value: any): string | null {
+    const facts = [
+      this.normalized(String(value.location || '')),
+      this.normalized(String(value.property_type || '')),
+      value.bedrooms == null ? '' : String(value.bedrooms),
+      value.price == null ? '' : String(value.price),
+      value.size_sqm == null ? '' : String(value.size_sqm),
+      this.normalized(String(value.title_document || '')),
+    ]
+    // A generic title alone is not an identity. Requiring corroborating facts
+    // prevents unrelated "Duplex" or "Land" listings from being collapsed.
+    if (facts.filter(Boolean).length < 2) return null
+    const identity = [
+      this.normalized(String(value.title || '')),
+      ...facts,
+    ].join('|')
+    return createHash('sha256').update(identity).digest('hex')
+  }
+
+  private isDuplicateProperty(left: any, right: any): boolean {
+    if (
+      left.source_fingerprint &&
+      right.source_fingerprint &&
+      left.source_fingerprint === right.source_fingerprint
+    ) {
+      return true
+    }
+
+    const leftTitle = this.normalized(String(left.title || ''))
+    const rightTitle = this.normalized(String(right.title || ''))
+    if (!leftTitle || !rightTitle) return false
+    const leftLocation = this.normalized(String(left.location || ''))
+    const rightLocation = this.normalized(String(right.location || ''))
+    const locationMatches =
+      leftLocation && rightLocation ? leftLocation === rightLocation : undefined
+    const priceMatches = this.numericFactMatches(left.price, right.price, 0.05)
+    const bedroomMatches = this.numericFactMatches(
+      left.bedrooms,
+      right.bedrooms,
+    )
+    const sizeMatches = this.numericFactMatches(
+      left.size_sqm,
+      right.size_sqm,
+      0.02,
+    )
+    const typeMatches = this.textFactMatches(
+      left.property_type,
+      right.property_type,
+    )
+
+    const exactTitleEvidence = [
+      locationMatches,
+      priceMatches,
+      bedroomMatches,
+      sizeMatches,
+      typeMatches,
+    ].filter(value => value === true).length
+    const exactTitleConflict = [
+      locationMatches,
+      priceMatches,
+      bedroomMatches,
+      sizeMatches,
+      typeMatches,
+    ].some(value => value === false)
+    if (
+      leftTitle === rightTitle &&
+      !exactTitleConflict &&
+      (locationMatches === true ||
+        priceMatches === true ||
+        exactTitleEvidence >= 2)
+    ) {
+      return true
+    }
+
+    const comparableMatches = [
+      leftLocation && rightLocation
+        ? leftLocation === rightLocation
+        : undefined,
+      priceMatches,
+      bedroomMatches,
+      sizeMatches,
+      typeMatches,
+    ].filter(value => value !== undefined)
+    const matches = comparableMatches.filter(Boolean).length
+    const conflicts = comparableMatches.filter(value => value === false).length
+    return (
+      conflicts === 0 &&
+      matches >= 3 &&
+      this.tokenSimilarity(leftTitle, rightTitle) >= 0.5
+    )
+  }
+
+  private numericFactMatches(
+    left: unknown,
+    right: unknown,
+    tolerance = 0,
+  ): boolean | undefined {
+    if (left == null || right == null || left === '' || right === '') {
+      return undefined
+    }
+    const a = Number(left)
+    const b = Number(right)
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return undefined
+    if (!tolerance) return a === b
+    return Math.abs(a - b) <= Math.max(Math.abs(a), Math.abs(b), 1) * tolerance
+  }
+
+  private textFactMatches(left: unknown, right: unknown): boolean | undefined {
+    const a = this.normalized(String(left || ''))
+    const b = this.normalized(String(right || ''))
+    return a && b ? a === b : undefined
+  }
+
+  private tokenSimilarity(left: string, right: string): number {
+    const ignored = new Set([
+      'available',
+      'beautiful',
+      'brand',
+      'for',
+      'luxury',
+      'new',
+      'property',
+      'sale',
+    ])
+    const a = new Set(left.split(' ').filter(token => !ignored.has(token)))
+    const b = new Set(right.split(' ').filter(token => !ignored.has(token)))
+    const union = new Set([...a, ...b])
+    if (!union.size) return 0
+    const intersection = [...a].filter(token => b.has(token)).length
+    return intersection / union.size
+  }
+
+  private richerText(
+    current: string | null | undefined,
+    incoming: string | null | undefined,
+  ): string | null {
+    const first = current?.trim() || ''
+    const second = incoming?.trim() || ''
+    return (second.length > first.length ? second : first) || null
   }
 
   private async indexDocumentParents(companyId: number): Promise<number> {

@@ -105,6 +105,42 @@ export class ChatLifecycleService {
           job_id: options.jobId || null,
         },
       })
+      if (toState === 'QUALIFIED') {
+        const budget = contact.budget_max
+          ? `${contact.budget_currency || 'NGN'} ${Number(contact.budget_max).toLocaleString()}`
+          : contact.budget_raw || null
+        const summary = [
+          contact.property_type,
+          contact.preferred_location
+            ? `in ${contact.preferred_location}`
+            : null,
+          budget ? `budget ${budget}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+        const title = contact.name || contact.whatsapp_profile_name || 'A lead'
+        await tx.notifications.upsert({
+          where: {
+            company_id_dedupe_key: {
+              company_id: contact.company_id,
+              dedupe_key: `qualified-lead:${contact.id}`,
+            },
+          },
+          create: {
+            company_id: contact.company_id,
+            type: 'qualified_lead',
+            severity: 'success',
+            title: 'New qualified WhatsApp lead',
+            message: `${title} is qualified${summary ? ` — ${summary}` : ''}. Open the chat to review and follow up.`,
+            entity: 'chat',
+            entity_id: String(contact.id),
+            dedupe_key: `qualified-lead:${contact.id}`,
+          },
+          update: {
+            message: `${title} is qualified${summary ? ` — ${summary}` : ''}. Open the chat to review and follow up.`,
+          },
+        })
+      }
       this.logger.log(`Contact ${contactId}: ${fromState} -> ${toState}`)
       return updated
     })
