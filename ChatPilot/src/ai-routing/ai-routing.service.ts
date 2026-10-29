@@ -407,14 +407,22 @@ export class AiRoutingService {
     const rows = await this.prisma.ai_usage_events.findMany({
       where: { provider: candidate.provider, created_at: { gte: since } },
       select: {
+        workload: true,
         status: true,
         total_tokens: true,
         estimated_units: true,
       },
     })
     const background = isBackgroundWorkload(workload)
+    const mediaRows = rows.filter(row => row.workload === AiWorkload.MediaIndex)
 
     if (candidate.provider === 'google') {
+      if (workload === AiWorkload.MediaIndex) {
+        return (
+          mediaRows.length <
+          this.numberEnv('AI_GEMINI_MEDIA_INDEX_DAILY_REQUEST_BUDGET', 40)
+        )
+      }
       const attempts = rows.length
       const dailyLimit = this.numberEnv('AI_GEMINI_DAILY_REQUEST_BUDGET', 20)
       const backgroundLimit = this.numberEnv(
@@ -431,6 +439,12 @@ export class AiRoutingService {
         120_000,
       )
       return tokens < (background ? backgroundLimit : dailyLimit)
+    }
+    if (workload === AiWorkload.MediaIndex) {
+      return (
+        mediaRows.length <
+        this.numberEnv('AI_CLOUDFLARE_MEDIA_INDEX_DAILY_REQUEST_BUDGET', 120)
+      )
     }
     const neurons = rows.reduce(
       (sum, row) => sum + (row.estimated_units || 0),
