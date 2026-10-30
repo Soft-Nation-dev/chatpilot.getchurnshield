@@ -269,4 +269,39 @@ describe('MediaIntelligenceService document extraction', () => {
       ),
     ).toBe(true)
   })
+
+  it('extracts balanced property JSON after provider reasoning and markdown', () => {
+    const service = new MediaIntelligenceService(
+      {} as any,
+      {} as any,
+      {} as any,
+    )
+    const response = [
+      '<think>I considered {several} possibilities.</think>',
+      '```json',
+      '{"properties":[{"title":"Lekki Duplex","description":"Has a {private} garden"}]}',
+      '```',
+    ].join('\n')
+
+    expect((service as any).parseDocumentProperties(response)).toEqual([
+      {
+        title: 'Lekki Duplex',
+        description: 'Has a {private} garden',
+      },
+    ])
+  })
+
+  it('rejects truncated property JSON instead of guessing missing data', () => {
+    const service = new MediaIntelligenceService(
+      {} as any,
+      {} as any,
+      {} as any,
+    )
+
+    expect(
+      (service as any).parseDocumentProperties(
+        '{"properties":[{"title":"Incomplete listing"}',
+      ),
+    ).toBeNull()
+  })
 })

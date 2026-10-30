@@ -734,7 +734,7 @@ export class MediaIntelligenceService {
   }
 
   private propertyExtractionPrompt(): string {
-    return 'Extract only explicitly stated real-estate listings from the supplied brochure content. Never infer or invent a price, location, title document, availability, room count, feature, or image relationship. Return strict JSON only: {"properties":[{"title":"","description":null,"property_type":null,"location":null,"state":null,"price":null,"price_max":null,"currency":"NGN","size_sqm":null,"bedrooms":null,"bathrooms":null,"title_document":null,"payment_plan":null,"features":null,"status":"available|reserved|sold|hidden","image_indices":[1]}]}. image_indices must contain only the 1-based numbers of images that visibly contain that exact listing and its property photograph. Do not assign logos, generic covers, maps, quotes, people-only pages, or another listing\'s picture. Leave image_indices empty when uncertain. Use numeric naira values without commas. Return {"properties":[]} when there is no identifiable property listing. Keep each description factual and under 600 characters.'
+    return '/no_think\nExtract only explicitly stated real-estate listings from the supplied brochure content. Do not reveal reasoning or include commentary. Never infer or invent a price, location, title document, availability, room count, feature, or image relationship. Return strict JSON only: {"properties":[{"title":"","description":null,"property_type":null,"location":null,"state":null,"price":null,"price_max":null,"currency":"NGN","size_sqm":null,"bedrooms":null,"bathrooms":null,"title_document":null,"payment_plan":null,"features":null,"status":"available|reserved|sold|hidden","image_indices":[1]}]}. image_indices must contain only the 1-based numbers of images that visibly contain that exact listing and its property photograph. Do not assign logos, generic covers, maps, quotes, people-only pages, or another listing\'s picture. Leave image_indices empty when uncertain. Use numeric naira values without commas. Return {"properties":[]} when there is no identifiable property listing. Keep each description factual and under 600 characters.'
   }
 
   private documentPageText(description: string | null | undefined): string {
@@ -763,21 +763,55 @@ export class MediaIntelligenceService {
   }
 
   private parseDocumentProperties(raw: string): ExtractedProperty[] | null {
-    try {
-      const start = raw.indexOf('{')
-      const end = raw.lastIndexOf('}')
-      if (start < 0 || end <= start) return null
-      const parsed = JSON.parse(raw.slice(start, end + 1))
-      if (!Array.isArray(parsed?.properties)) return null
-      return parsed.properties.filter(
-        (item: unknown) =>
-          item &&
-          typeof item === 'object' &&
-          typeof (item as any).title === 'string',
-      )
-    } catch {
-      return null
+    // Some providers wrap valid JSON in markdown or a completed <think>
+    // section. Search balanced objects instead of assuming that the first and
+    // last braces belong to the payload. Never attempt to repair truncated
+    // JSON because that could silently invent or misassociate listing data.
+    const withoutThinking = raw.replace(/<think>[\s\S]*?<\/think>/gi, '')
+    const starts: number[] = []
+    for (let index = 0; index < withoutThinking.length; index++) {
+      if (withoutThinking[index] === '{') starts.push(index)
     }
+    for (const start of starts) {
+      const candidate = this.balancedJsonObject(withoutThinking, start)
+      if (!candidate || !candidate.includes('"properties"')) continue
+      try {
+        const parsed = JSON.parse(candidate)
+        if (!Array.isArray(parsed?.properties)) continue
+        return parsed.properties.filter(
+          (item: unknown) =>
+            item &&
+            typeof item === 'object' &&
+            typeof (item as any).title === 'string',
+        )
+      } catch {
+        continue
+      }
+    }
+    return null
+  }
+
+  private balancedJsonObject(raw: string, start: number): string | null {
+    let depth = 0
+    let quoted = false
+    let escaped = false
+    for (let index = start; index < raw.length; index++) {
+      const character = raw[index]
+      if (quoted) {
+        if (escaped) escaped = false
+        else if (character === '\\') escaped = true
+        else if (character === '"') quoted = false
+        continue
+      }
+      if (character === '"') quoted = true
+      else if (character === '{') depth++
+      else if (character === '}') {
+        depth--
+        if (depth === 0) return raw.slice(start, index + 1)
+        if (depth < 0) return null
+      }
+    }
+    return null
   }
 
   private async extractPdfText(url: string): Promise<string | null> {
