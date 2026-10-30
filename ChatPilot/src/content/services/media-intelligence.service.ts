@@ -376,7 +376,7 @@ export class MediaIntelligenceService {
           system: this.propertyExtractionPrompt(),
           ...(pageText
             ? {
-                prompt: `Extract only the distinct property listings explicitly stated on this rendered brochure page from ${document.file_name}. The page screenshot is Image 1. Set image_indices to [1] only for a property listed on this page; otherwise return an empty properties array.\n\nPage text:\n${pageText}`,
+                prompt: `Extract only the distinct property listings explicitly stated on this rendered brochure page from ${document.file_name}. The page screenshot is Image 1. Set image_indices to [1] only for a property listed on this page; otherwise return an empty properties array.\n\nPage text:\n${pageText}\n\n/no_think`,
               }
             : {
                 messages: [
@@ -400,7 +400,10 @@ export class MediaIntelligenceService {
                   },
                 ],
               }),
-          maxOutputTokens: 900,
+          // Qwen can consume part of the allowance before emitting the JSON
+          // even with /no_think. Leave enough room for the strict payload so
+          // a valid listing is not truncated midway through a page.
+          maxOutputTokens: 1800,
           temperature: 0.1,
         })
         const parsed = this.parseDocumentProperties(result.text)
@@ -428,8 +431,8 @@ export class MediaIntelligenceService {
           workload: AiWorkload.Content,
           companyId: document.company_id,
           system: this.propertyExtractionPrompt(),
-          prompt: `Extract the distinct property listings from text section ${index + 1} of ${chunks.length} in ${document.file_name}. No listing images are available for this section, so image_indices must be empty.\n\n${chunk}`,
-          maxOutputTokens: 1400,
+          prompt: `Extract the distinct property listings from text section ${index + 1} of ${chunks.length} in ${document.file_name}. No listing images are available for this section, so image_indices must be empty.\n\n${chunk}\n\n/no_think`,
+          maxOutputTokens: 2000,
           temperature: 0.1,
         })
         const parsed = this.parseDocumentProperties(result.text)
