@@ -1033,7 +1033,10 @@ Generate ONLY the system prompt text, no explanations.`,
         this.logger.warn(`Could not extract PDF page text: ${error?.message}`)
       }
 
-      return Promise.all(
+      // Await every page before the finally block removes the temporary
+      // directory. Returning the promise directly lets finally run first,
+      // which deletes the JPEGs while Tesseract is still reading them.
+      return await Promise.all(
         names.map(async (name, index) => {
           const imagePath = join(directory, name)
           let pageText = String(embeddedPageText[index] || '').trim()
