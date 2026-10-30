@@ -20,7 +20,7 @@ ENV NODE_ENV=production
 
 # Render PDF brochure pages for reliable visual listing extraction. Pulling
 # raw JPEG byte streams loses the page/property relationship.
-RUN apk add --no-cache poppler-utils tesseract-ocr
+RUN apk add --no-cache poppler-utils tesseract-ocr tesseract-ocr-data-eng
 
 COPY package*.json ./
 RUN npm ci --omit=dev --legacy-peer-deps
