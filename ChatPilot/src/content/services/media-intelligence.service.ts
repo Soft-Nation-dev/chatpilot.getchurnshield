@@ -556,8 +556,12 @@ export class MediaIntelligenceService {
               duplicate.title_document ||
               this.cleanText(property.title_document, 60),
             payment_plan:
-              duplicate.payment_plan || property.payment_plan || null,
-            features: duplicate.features || property.features || null,
+              duplicate.payment_plan ||
+              this.cleanText(property.payment_plan, 1000),
+            // Providers occasionally return a JSON array despite the string
+            // schema. Always normalize before handing data to Prisma.
+            features:
+              duplicate.features || this.cleanText(property.features, 3000),
             image_urls: mergedImages.length
               ? mergedImages.slice(0, 10).join(',')
               : duplicate.image_urls,
@@ -878,7 +882,12 @@ export class MediaIntelligenceService {
   }
 
   private cleanText(value: unknown, max: number): string | null {
-    const cleaned = String(value || '')
+    const source = Array.isArray(value)
+      ? value
+          .filter(item => ['string', 'number'].includes(typeof item))
+          .join(', ')
+      : String(value || '')
+    const cleaned = source
       .replace(/\s+/g, ' ')
       .trim()
     return cleaned ? cleaned.slice(0, max) : null

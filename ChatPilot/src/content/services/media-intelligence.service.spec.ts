@@ -304,4 +304,16 @@ describe('MediaIntelligenceService document extraction', () => {
       ),
     ).toBeNull()
   })
+
+  it('normalizes model list fields before saving them as property text', () => {
+    const service = new MediaIntelligenceService(
+      {} as any,
+      {} as any,
+      {} as any,
+    )
+
+    expect((service as any).cleanText(['Swimming pool', 'Gym'], 3000)).toBe(
+      'Swimming pool, Gym',
+    )
+  })
 })
