@@ -469,7 +469,15 @@ export class CompanyController {
     @Param('contactId', ParseIntPipe) contactId: number,
     @Body()
     body: {
-      action: 'pause' | 'resume' | 'handoff' | 'close' | 'reopen' | 'retry'
+      action:
+        | 'pause'
+        | 'soft_review'
+        | 'hard_takeover'
+        | 'resume'
+        | 'handoff'
+        | 'close'
+        | 'reopen'
+        | 'retry'
       reason?: string
     },
   ) {
@@ -480,10 +488,12 @@ export class CompanyController {
     }
     const reason = body.reason || `Dashboard action: ${body.action}`
 
-    if (body.action === 'pause') {
-      return this.contactService.updateContact(contactId, {
-        is_bot_activated: false,
-        state_change_reason: reason,
+    if (body.action === 'pause' || body.action === 'soft_review') {
+      return this.chatLifecycle.setReviewMode(contactId, 'SOFT_REVIEW', {
+        reason:
+          body.reason ||
+          'Dashboard soft review: AI paused but monitoring new business intent',
+        actor: 'dashboard_user',
       })
     }
     if (body.action === 'resume' || body.action === 'reopen') {
@@ -492,9 +502,11 @@ export class CompanyController {
         actor: 'dashboard_user',
       })
     }
-    if (body.action === 'handoff') {
-      return this.chatLifecycle.transition(contactId, 'HUMAN_TAKEOVER', {
-        reason,
+    if (body.action === 'handoff' || body.action === 'hard_takeover') {
+      return this.chatLifecycle.setReviewMode(contactId, 'HARD_TAKEOVER', {
+        reason:
+          body.reason ||
+          'Dashboard hard takeover: all AI replies blocked until manually resumed',
         actor: 'dashboard_user',
       })
     }
@@ -528,7 +540,7 @@ export class CompanyController {
     }
 
     throw new UnprocessableEntityException(
-      `Action must be one of pause, resume, handoff, close, reopen, retry. States: ${CHAT_STATES.join(', ')}`,
+      `Action must be one of soft_review, hard_takeover, resume, close, reopen, retry. States: ${CHAT_STATES.join(', ')}`,
     )
   }
 
@@ -559,7 +571,9 @@ export class CompanyController {
     return this.companyService.getAssets(id)
   }
 
-  @ApiOperation({ summary: 'Register media stored in the public media library' })
+  @ApiOperation({
+    summary: 'Register media stored in the public media library',
+  })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Post(':id/assets/register')
@@ -589,7 +603,9 @@ export class CompanyController {
     return this.companyService.registerExternalMedia(id, body)
   }
 
-  @ApiOperation({ summary: 'Remove a deleted media-library item from the index' })
+  @ApiOperation({
+    summary: 'Remove a deleted media-library item from the index',
+  })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Post(':id/assets/unregister')

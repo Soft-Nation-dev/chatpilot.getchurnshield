@@ -70,6 +70,8 @@ export type ChatState =
   | 'CONCLUDED_CLOSED'
   | 'COLD_LEAD'
 
+export type ReviewMode = 'ACTIVE' | 'SOFT_REVIEW' | 'HARD_TAKEOVER'
+
 export interface AutomationEvent {
   id: number
   job_type: string
@@ -139,6 +141,8 @@ export interface Contact {
   follow_up_count: number
   follow_up_due_at: string | null
   last_automated_message_at: string | null
+  review_mode: ReviewMode
+  last_human_message_at: string | null
   automation_events?: AutomationEvent[]
   messages?: Message[]
 }

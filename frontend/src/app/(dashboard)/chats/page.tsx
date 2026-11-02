@@ -20,9 +20,10 @@ import {
   CircleX,
   Clock3,
   Hand,
-  Pause,
+  MessageCircleMore,
   Play,
   RefreshCw,
+  ShieldAlert,
 } from "lucide-react";
 
 const STATE_LABELS: Record<string, string> = {
@@ -31,7 +32,7 @@ const STATE_LABELS: Record<string, string> = {
   QUALIFIED: "Qualified",
   INSPECTION_PENDING: "Inspection pending",
   INSPECTION_BOOKED: "Inspection booked",
-  HUMAN_TAKEOVER: "Human takeover",
+  HUMAN_TAKEOVER: "Under review",
   CONCLUDED_CLOSED: "Closed",
   COLD_LEAD: "Cold lead",
 };
@@ -61,6 +62,7 @@ export default function ChatsPage() {
   const [showOperations, setShowOperations] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+  const [actionNotice, setActionNotice] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesViewportRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
@@ -72,6 +74,13 @@ export default function ChatsPage() {
         params: { page: 1, limit: 50, search: search || undefined },
       });
       setContacts(res.data);
+      setSelectedContact((current) => {
+        if (!current) return current;
+        return (
+          (res.data.data as Contact[]).find((item) => item.id === current.id) ||
+          current
+        );
+      });
     } catch {
       /* silent */
     }
@@ -118,16 +127,24 @@ export default function ChatsPage() {
     setShowMobileChat(true);
     setShowOperations(false);
     setActionError("");
+    setActionNotice("");
     shouldAutoScrollRef.current = true;
     fetchMessages(contact.id);
   };
 
   const runAction = async (
-    action: "pause" | "resume" | "handoff" | "close" | "reopen" | "retry",
+    action:
+      | "soft_review"
+      | "hard_takeover"
+      | "resume"
+      | "close"
+      | "reopen"
+      | "retry",
   ) => {
     if (!companyId || !selectedContact) return;
     setActionLoading(action);
     setActionError("");
+    setActionNotice("");
     try {
       const response = await api.put(
         `/companies/${companyId}/contacts/${selectedContact.id}/automation`,
@@ -138,6 +155,17 @@ export default function ChatsPage() {
           current ? { ...current, ...response.data } : current,
         );
       }
+      setActionNotice(
+        action === "soft_review"
+          ? "Soft review enabled. AI is paused but will resume for a clear new business enquiry."
+          : action === "hard_takeover"
+            ? "Hard takeover enabled. AI cannot reply until you manually resume it."
+            : action === "resume" || action === "reopen"
+              ? "AI replies resumed for this conversation."
+              : action === "close"
+                ? "Conversation closed. A clear new enquiry can still reopen it automatically."
+                : "Reply retry queued.",
+      );
       await Promise.all([fetchContacts(), fetchMessages(selectedContact.id)]);
     } catch (cause: any) {
       setActionError(
@@ -153,10 +181,11 @@ export default function ChatsPage() {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
         fetchMessages(selectedContact.id, true);
+        fetchContacts();
       }
     }, 30_000);
     return () => clearInterval(interval);
-  }, [selectedContact, fetchMessages]);
+  }, [selectedContact, fetchMessages, fetchContacts]);
 
   useEffect(() => {
     if (shouldAutoScrollRef.current) {
@@ -205,6 +234,29 @@ export default function ChatsPage() {
     if (last?.date === date) last.msgs.push(msg);
     else grouped.push({ date, msgs: [msg] });
   });
+
+  const reviewMode = selectedContact?.review_mode ||
+    (selectedContact?.chat_state === "HUMAN_TAKEOVER"
+      ? "SOFT_REVIEW"
+      : "ACTIVE");
+  const aiActive =
+    reviewMode === "ACTIVE" &&
+    selectedContact?.is_bot_activated !== false &&
+    selectedContact?.is_replies_activated !== false;
+  const conversationModeLabel =
+    reviewMode === "HARD_TAKEOVER"
+      ? "Hard takeover"
+      : reviewMode === "SOFT_REVIEW"
+        ? "Soft review"
+        : selectedContact?.chat_state === "CONCLUDED_CLOSED"
+          ? "Watching for new enquiry"
+          : "AI active";
+  const contactStateLabel = (contact: Contact) =>
+    contact.review_mode === "HARD_TAKEOVER"
+      ? "Hard takeover"
+      : contact.review_mode === "SOFT_REVIEW"
+        ? "Soft review"
+        : STATE_LABELS[contact.chat_state] || "New";
 
   return (
     <div className="flex h-[calc(100vh-8rem)] -m-6 lg:-m-8 rounded-2xl overflow-hidden border border-slate-200/60 bg-white shadow-sm">
@@ -276,7 +328,7 @@ export default function ChatsPage() {
                         {lastMsg(contact)}
                       </p>
                       <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-medium text-slate-600">
-                        {STATE_LABELS[contact.chat_state] || "New"}
+                        {contactStateLabel(contact)}
                       </span>
                     </div>
                   </div>
@@ -363,44 +415,49 @@ export default function ChatsPage() {
                 {STATE_LABELS[selectedContact.chat_state] || "New"}
               </Badge>
               <Badge
-                variant={
-                  selectedContact.is_bot_activated ? "default" : "secondary"
-                }
-                className={`text-[10px] ${selectedContact.is_bot_activated ? "bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100" : ""}`}
+                variant={aiActive ? "default" : "secondary"}
+                className={`text-[10px] ${aiActive ? "bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100" : reviewMode === "HARD_TAKEOVER" ? "bg-red-100 text-red-700 border-red-200" : "bg-amber-100 text-amber-700 border-amber-200"}`}
               >
-                AI {selectedContact.is_bot_activated ? "On" : "Off"}
+                {conversationModeLabel}
               </Badge>
             </div>
 
             <div className="border-b border-slate-100 bg-white px-3 py-2.5 sm:px-5">
               <div className="flex gap-2 overflow-x-auto pb-1">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 shrink-0 text-xs"
-                  disabled={!!actionLoading}
-                  onClick={() =>
-                    runAction(
-                      selectedContact.is_bot_activated ? "pause" : "resume",
-                    )
-                  }
-                >
-                  {selectedContact.is_bot_activated ? (
-                    <Pause className="mr-1.5 h-3.5 w-3.5" />
-                  ) : (
+                {reviewMode === "ACTIVE" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 shrink-0 text-xs"
+                    disabled={!!actionLoading}
+                    onClick={() => runAction("soft_review")}
+                    title="Pause replies while AI watches for a clear new business enquiry"
+                  >
+                    <MessageCircleMore className="mr-1.5 h-3.5 w-3.5" />
+                    Soft review
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 shrink-0 text-xs"
+                    disabled={!!actionLoading}
+                    onClick={() => runAction("resume")}
+                  >
                     <Play className="mr-1.5 h-3.5 w-3.5" />
-                  )}
-                  {selectedContact.is_bot_activated ? "Pause AI" : "Resume AI"}
-                </Button>
+                    Resume AI
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 shrink-0 text-xs"
-                  disabled={!!actionLoading}
-                  onClick={() => runAction("handoff")}
+                  className="h-8 shrink-0 text-xs text-red-700 hover:bg-red-50 hover:text-red-800"
+                  disabled={!!actionLoading || reviewMode === "HARD_TAKEOVER"}
+                  onClick={() => runAction("hard_takeover")}
+                  title="Block every AI reply until a team member manually resumes it"
                 >
-                  <Hand className="mr-1.5 h-3.5 w-3.5" />
-                  Take over
+                  <ShieldAlert className="mr-1.5 h-3.5 w-3.5" />
+                  Hard takeover
                 </Button>
                 {selectedContact.chat_state === "CONCLUDED_CLOSED" ? (
                   <Button
@@ -431,7 +488,8 @@ export default function ChatsPage() {
                   className="h-8 shrink-0 text-xs"
                   disabled={
                     !!actionLoading ||
-                    selectedContact.chat_state === "CONCLUDED_CLOSED"
+                    selectedContact.chat_state === "CONCLUDED_CLOSED" ||
+                    reviewMode !== "ACTIVE"
                   }
                   onClick={() => runAction("retry")}
                 >
@@ -444,6 +502,37 @@ export default function ChatsPage() {
               {actionError && (
                 <p className="mt-2 text-xs text-red-600">{actionError}</p>
               )}
+              {actionNotice && (
+                <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                  {actionNotice}
+                </p>
+              )}
+              <div
+                className={`mt-2 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-xs ${
+                  reviewMode === "HARD_TAKEOVER"
+                    ? "border-red-200 bg-red-50 text-red-800"
+                    : reviewMode === "SOFT_REVIEW"
+                      ? "border-amber-200 bg-amber-50 text-amber-800"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                }`}
+              >
+                {reviewMode === "HARD_TAKEOVER" ? (
+                  <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                ) : reviewMode === "SOFT_REVIEW" ? (
+                  <Hand className="mt-0.5 h-4 w-4 shrink-0" />
+                ) : (
+                  <Play className="mt-0.5 h-4 w-4 shrink-0" />
+                )}
+                <p>
+                  {reviewMode === "HARD_TAKEOVER"
+                    ? "Only your team can reply. New messages will be saved and shown as unread, but AI will not resume automatically."
+                    : reviewMode === "SOFT_REVIEW"
+                      ? "AI is paused. It monitors new private messages and resumes only for a high-confidence property, media, pricing or inspection enquiry when a teammate is not actively replying."
+                      : selectedContact.chat_state === "CONCLUDED_CLOSED"
+                        ? "This deal is closed, but AI is watching. A clear new business enquiry will reopen the chat and notify your team."
+                        : "AI can answer incoming business questions. You can switch to soft review or hard takeover at any time."}
+                </p>
+              </div>
               <div className="mt-2 grid grid-cols-[1fr_1fr_auto] items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
                 <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-wide text-slate-400">

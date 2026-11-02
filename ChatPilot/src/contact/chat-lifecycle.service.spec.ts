@@ -8,14 +8,27 @@ describe('ChatLifecycleService', () => {
     chat_state: 'QUALIFYING',
     is_bot_activated: true,
     is_replies_activated: true,
+    review_mode: 'ACTIVE',
     crm_appointment_id: null,
     companies: { is_bot_activated: true },
   }
 
   it('blocks every automated action during a human takeover', () => {
-    const contact = { ...base, chat_state: 'HUMAN_TAKEOVER' }
+    const contact = {
+      ...base,
+      chat_state: 'HUMAN_TAKEOVER',
+      review_mode: 'SOFT_REVIEW',
+    }
     expect(service.evaluate(contact, 'INBOUND_REPLY').allowed).toBe(false)
     expect(service.evaluate(contact, 'FOLLOW_UP').allowed).toBe(false)
+  })
+
+  it('keeps hard takeover authoritative even when reply flags are on', () => {
+    const contact = { ...base, review_mode: 'HARD_TAKEOVER' }
+    expect(service.evaluate(contact, 'INBOUND_REPLY')).toMatchObject({
+      allowed: false,
+      reason: 'hard_takeover',
+    })
   })
 
   it('allows an inbound reply but blocks proactive follow-up after booking', () => {
@@ -36,8 +49,10 @@ describe('ChatLifecycleService', () => {
 
   it('respects contact and company pause switches', () => {
     expect(
-      service.evaluate({ ...base, is_replies_activated: false }, 'INBOUND_REPLY')
-        .reason,
+      service.evaluate(
+        { ...base, is_replies_activated: false },
+        'INBOUND_REPLY',
+      ).reason,
     ).toBe('automation_paused')
     expect(
       service.evaluate(
@@ -82,6 +97,7 @@ describe('ChatLifecycleService', () => {
         is_bot_activated: true,
         is_replies_activated: true,
         needs_review: false,
+        review_mode: 'ACTIVE',
         chat_state: 'QUALIFYING',
         conversation_state: { version: 1 },
       }),

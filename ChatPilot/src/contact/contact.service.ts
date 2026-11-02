@@ -596,6 +596,8 @@ export class ContactService {
     ,follow_up_due_at = NULL
     ,last_customer_message_at = NULL
     ,last_automated_message_at = NULL
+    ,review_mode = 'ACTIVE'
+    ,last_human_message_at = NULL
   WHERE id = ${contactId};
 `
   }

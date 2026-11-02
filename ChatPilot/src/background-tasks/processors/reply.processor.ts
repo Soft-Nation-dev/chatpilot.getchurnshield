@@ -42,8 +42,7 @@ export class ReplyProcessor extends WorkerHost {
 
     const latestInboundAt = contact.messages
       .filter(
-        message =>
-          message.author_type === AUTHOR_TYPE.HUMAN && message.sent_at,
+        message => message.author_type === AUTHOR_TYPE.HUMAN && message.sent_at,
       )
       .reduce<Date | null>((latest, message) => {
         const sentAt = message.sent_at as Date
@@ -73,7 +72,8 @@ export class ReplyProcessor extends WorkerHost {
         message.author_type === AUTHOR_TYPE.HUMAN &&
         message.message.trim().toLowerCase() === '/reset',
     )
-    if (!gate.allowed && !resetRequested) {
+    const resetCanRecover = resetRequested && gate.reason !== 'hard_takeover'
+    if (!gate.allowed && !resetCanRecover) {
       await this.contactService.markMessagesProcessed(contact)
       if (contact.company_id) {
         await this.chatLifecycle.recordAutomation({
@@ -90,7 +90,7 @@ export class ReplyProcessor extends WorkerHost {
       return { blocked: true, reason: gate.reason }
     }
 
-    if (!gate.allowed && resetRequested) {
+    if (!gate.allowed && resetCanRecover) {
       this.logger.log(
         `Allowing explicit reset recovery for blocked contact ${contact.id}`,
       )
@@ -175,7 +175,9 @@ export class ReplyProcessor extends WorkerHost {
         // takeover during this same job. Send exactly one canonical handoff
         // message before respecting the newly closed gate, otherwise the state
         // transition itself suppresses the explanation the customer needs.
-        const latestContact = await this.contactService.getContactById(contact.id)
+        const latestContact = await this.contactService.getContactById(
+          contact.id,
+        )
         const terminalHandoff =
           gate.allowed &&
           (latestContact as any)?.conversation_state?.inspection?.status ===

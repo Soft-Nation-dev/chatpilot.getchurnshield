@@ -148,6 +148,8 @@ model contacts {
   follow_up_due_at          DateTime?                @db.Timestamptz(6)
   last_customer_message_at  DateTime?                @db.Timestamptz(6)
   last_automated_message_at DateTime?                @db.Timestamptz(6)
+  review_mode               String                   @default("ACTIVE") @db.VarChar(24)
+  last_human_message_at     DateTime?                @db.Timestamptz(6)
   companies                 companies?               @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "poc_clinics_contacts_company_id_fk")
   messages                  messages[]
   automation_events         automation_events[]
@@ -159,6 +161,7 @@ model contacts {
   @@index([source_ref])
   @@index([company_id, follow_up_stage, last_message_received])
   @@index([company_id, chat_state, last_message_received])
+  @@index([company_id, review_mode, last_message_received])
   @@index([chat_state, follow_up_due_at])
 }
 

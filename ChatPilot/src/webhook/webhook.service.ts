@@ -80,7 +80,7 @@ export class WebhookService {
 
       const contact = await this.contactService.getOrCreateContact(
         company,
-        userPhone != null ? Number(userPhone) : null,
+        userPhone !== null ? Number(userPhone) : null,
         !fromMe ? senderName : null,
         userlid ?? null,
         isFromLid ?? false,
@@ -110,14 +110,13 @@ export class WebhookService {
             originalMessageType,
             wbId ?? null,
           ),
-          this.contactService.updateContact(contact.id, {
-            is_replies_activated: false,
+          this.chatLifecycle.setReviewMode(contact.id, 'SOFT_REVIEW', {
+            reason:
+              'A team member replied from WhatsApp; AI is watching for a clear new business enquiry',
+            actor: 'team',
+            humanMessageAt: new Date(),
           }),
         ])
-        await this.chatLifecycle.transition(contact.id, 'HUMAN_TAKEOVER', {
-          reason: 'A team member replied from WhatsApp',
-          actor: 'team',
-        })
       } else {
         if (!contact.whatsapp_profile_name) {
           this.contactService.updateContact(contact.id, {
@@ -143,14 +142,102 @@ export class WebhookService {
         await this.contactService.resetFollowUps(contact.id)
 
         let automationAllowed = true
-        if (['NEW', 'COLD_LEAD'].includes((contact as any).chat_state || 'NEW')) {
-          const triage = this.intentTriage.classify(message)
-          await this.chatLifecycle.transition(contact.id, triage.state, {
-            reason: triage.reason,
-            actor: 'customer',
+        const state = (contact as any).chat_state || 'NEW'
+        const reviewMode = (contact as any).review_mode || 'ACTIVE'
+        if (!company.is_bot_activated) {
+          automationAllowed = false
+          await this.chatLifecycle.recordAutomation({
+            companyId: company.id,
+            contactId: contact.id,
+            jobType: 'intent_gate',
+            status: 'blocked',
+            details: { reason: 'company_automation_paused', state, reviewMode },
           })
+        } else if (reviewMode === 'HARD_TAKEOVER') {
+          automationAllowed = false
+          await this.chatLifecycle.recordAutomation({
+            companyId: company.id,
+            contactId: contact.id,
+            jobType: 'intent_gate',
+            status: 'blocked',
+            details: { reason: 'hard_takeover', state, reviewMode },
+          })
+        } else if (state === 'NEW') {
+          const triage = this.intentTriage.classify(message)
+          if (triage.state === 'HUMAN_TAKEOVER') {
+            await this.chatLifecycle.setReviewMode(
+              contact.id,
+              'HARD_TAKEOVER',
+              {
+                reason: triage.reason,
+                actor: 'customer',
+              },
+            )
+            ;(contact as any).review_mode = 'HARD_TAKEOVER'
+            ;(contact as any).is_replies_activated = false
+          } else {
+            await this.chatLifecycle.transition(contact.id, triage.state, {
+              reason: triage.reason,
+              actor: 'customer',
+            })
+          }
           ;(contact as any).chat_state = triage.state
           automationAllowed = triage.automate
+        } else if (
+          reviewMode === 'SOFT_REVIEW' ||
+          ['HUMAN_TAKEOVER', 'CONCLUDED_CLOSED', 'COLD_LEAD'].includes(state)
+        ) {
+          const verdict = await this.intentTriage.classifyReengagement(
+            message,
+            { companyId: company.id, contactId: contact.id },
+          )
+          if (verdict.shouldResume) {
+            const result = await this.chatLifecycle.autoResumeForIntent(
+              contact.id,
+              {
+                reason: verdict.reason,
+                intent: verdict.intent,
+                confidence: verdict.confidence,
+                classifier: verdict.classifier,
+              },
+            )
+            automationAllowed = result.resumed
+            if (result.resumed) {
+              Object.assign(contact as any, result.contact, {
+                chat_state: 'QUALIFYING',
+                review_mode: 'ACTIVE',
+                is_bot_activated: true,
+                is_replies_activated: true,
+              })
+            } else {
+              await this.chatLifecycle.recordAutomation({
+                companyId: company.id,
+                contactId: contact.id,
+                jobType: 'intent_gate',
+                status: 'blocked',
+                details: {
+                  reason: result.reason,
+                  intent: verdict.intent,
+                  confidence: verdict.confidence,
+                  classifier: verdict.classifier,
+                },
+              })
+            }
+          } else {
+            automationAllowed = false
+            await this.chatLifecycle.recordAutomation({
+              companyId: company.id,
+              contactId: contact.id,
+              jobType: 'intent_gate',
+              status: 'blocked',
+              details: {
+                reason: verdict.reason,
+                intent: verdict.intent,
+                confidence: verdict.confidence,
+                classifier: verdict.classifier,
+              },
+            })
+          }
         }
 
         this.socialAttribution
@@ -158,8 +245,10 @@ export class WebhookService {
           .catch(() => undefined)
 
         const shouldProcessMessage =
-          message.toLowerCase() === '/reset' ||
-          (automationAllowed && company.is_bot_activated &&
+          (message.toLowerCase() === '/reset' &&
+            (contact as any).review_mode !== 'HARD_TAKEOVER') ||
+          (automationAllowed &&
+            company.is_bot_activated &&
             contact.is_bot_activated &&
             contact.is_replies_activated)
 
