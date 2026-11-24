@@ -27,6 +27,7 @@ jobs:
           cache: npm
           cache-dependency-path: ChatPilot/package-lock.json
       - run: npm ci
+      - run: npm exec prisma generate
       - run: npm test -- --runInBand
       - run: npm run build
 

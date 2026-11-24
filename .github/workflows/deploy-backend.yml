@@ -39,6 +39,7 @@ jobs:
         shell: bash
         run: |
           npm --prefix ChatPilot ci
+          npm --prefix ChatPilot exec prisma generate
           npm --prefix ChatPilot test -- --runInBand
           npm --prefix ChatPilot run build
 
