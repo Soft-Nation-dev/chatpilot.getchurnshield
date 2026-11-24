@@ -29,9 +29,11 @@ and the WhatsApp gateway stays private inside Docker.
 ## Deploy
 
 The frontend deploys to Cloudflare from GitHub Actions. Hostinger runs the API and the separate
-WhatsApp gateway. See [`docs/HOSTINGER_DEPLOYMENT.md`](docs/HOSTINGER_DEPLOYMENT.md) for the required services,
-environment variables, and safe rollout commands. Secrets live in `.env` files on the server
-(never committed).
+WhatsApp gateway. Pushes to `main` validate all three applications, then deploy only the services
+whose folders changed. See [`docs/GITHUB_DEPLOYMENT.md`](docs/GITHUB_DEPLOYMENT.md) for repository
+secrets and the direct-from-GitHub workflow, and
+[`docs/HOSTINGER_DEPLOYMENT.md`](docs/HOSTINGER_DEPLOYMENT.md) for server recovery. Backend provider
+credentials stay in the protected VPS `.env` file and are never committed.
 
 For Facebook/Instagram OAuth, webhooks, and the two-stage social-to-WhatsApp
 test, see [`docs/META_LIVE_TEST.md`](docs/META_LIVE_TEST.md).

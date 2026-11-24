@@ -1,0 +1,85 @@
+name: Deploy backend to Hostinger VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ChatPilot/**"
+      - "WB/**"
+      - "infra/hostinger/**"
+      - "scripts/deploy-vps.sh"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: hostinger-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            ChatPilot/package-lock.json
+            WB/package-lock.json
+
+      - name: Validate API
+        shell: bash
+        run: |
+          npm --prefix ChatPilot ci
+          npm --prefix ChatPilot test -- --runInBand
+          npm --prefix ChatPilot run build
+
+      - name: Validate WhatsApp gateway
+        shell: bash
+        run: |
+          npm --prefix WB ci
+          npm --prefix WB test -- --runInBand --passWithNoTests
+          npm --prefix WB run build
+
+      - name: Configure pinned SSH access
+        shell: bash
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Build release archive
+        shell: bash
+        run: git archive --format=tar.gz --output="churnshield-${GITHUB_SHA}.tar.gz" HEAD
+
+      - name: Upload release
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: scp -O "churnshield-${GITHUB_SHA}.tar.gz" "${VPS_USER}@${VPS_HOST}:/tmp/churnshield-${GITHUB_SHA}.tar.gz"
+
+      - name: Activate release
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: ssh "${VPS_USER}@${VPS_HOST}" "deploy ${GITHUB_SHA}"
+
+      - name: Verify public services
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --retry 6 --retry-delay 5 https://api.trygetchurnshield.com/api/v1/ >/dev/null
+          curl --fail --silent --show-error --retry 6 --retry-delay 5 https://chatpilot.trygetchurnshield.com/ >/dev/null

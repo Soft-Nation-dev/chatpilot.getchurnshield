@@ -15,7 +15,7 @@ type MediaObjectBody = MediaObject & { body: ReadableStream<Uint8Array> }
 
 type MediaBucket = {
   list(options: { prefix: string; limit: number; include: string[] }): Promise<{ objects: MediaObject[] }>
-  put(key: string, value: ArrayBuffer, options: {
+  put(key: string, value: ArrayBuffer | ReadableStream<Uint8Array>, options: {
     httpMetadata: { contentType: string; cacheControl: string }
     customMetadata: Record<string, string>
   }): Promise<MediaObject | null>

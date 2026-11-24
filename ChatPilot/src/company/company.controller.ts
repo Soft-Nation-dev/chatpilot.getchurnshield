@@ -42,6 +42,8 @@ import {
 } from 'src/contact/chat-lifecycle.service'
 import { ReplyService } from 'src/background-tasks/services/reply.service'
 
+const MAX_COMPANY_ASSET_BYTES = 95 * 1024 * 1024
+
 @ApiTags('Companies')
 @Controller('companies')
 export class CompanyController {
@@ -550,7 +552,11 @@ export class CompanyController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Post(':id/assets/upload')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_COMPANY_ASSET_BYTES },
+    }),
+  )
   async uploadAsset(
     @Request() req: any,
     @Param('id', ParseIntPipe) id: number,

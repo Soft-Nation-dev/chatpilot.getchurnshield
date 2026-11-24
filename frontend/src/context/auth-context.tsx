@@ -13,7 +13,6 @@ import {
   getAccessToken,
   setTokens,
   clearTokens,
-  isTokenExpired,
 } from "@/lib/auth";
 import { User } from "@/lib/types";
 
@@ -39,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUser = useCallback(async () => {
     const token = getAccessToken();
-    if (!token || isTokenExpired(token)) {
+    if (!token) {
       setUser(null);
       setLoading(false);
       return;
@@ -48,9 +47,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await api.get("/auth/me");
       setUser(res.data);
     } catch {
-      clearTokens();
-      setUser(null);
-      router.replace("/login");
+      // The Axios interceptor renews an expired 15-minute access token and
+      // retries /auth/me. A temporary network failure must not tear down the
+      // dashboard (and any form the customer is editing).
     } finally {
       setLoading(false);
     }

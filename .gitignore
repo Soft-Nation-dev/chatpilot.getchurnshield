@@ -25,5 +25,11 @@ auth_session/
 
 # Deployment config — kept out of the repo
 deployment/
+/tmp/
+/output/
+/infra/local/
+/.vscode/
+/.codex/
+*.lnk
 
 .DS_Store

@@ -7,18 +7,10 @@ import {
   requireMediaUser,
 } from '@/lib/server/media'
 import { API_BASE_URL } from '@/lib/api-base'
-
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-const MAX_VIDEO_BYTES = 50 * 1024 * 1024
-const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
-const SUPPORTED_TYPES = new Map([
-  ['image/jpeg', 'jpg'],
-  ['image/png', 'png'],
-  ['image/webp', 'webp'],
-  ['video/mp4', 'mp4'],
-  ['video/quicktime', 'mov'],
-  ['application/pdf', 'pdf'],
-])
+import {
+  SUPPORTED_MEDIA_TYPES,
+  validateMediaFile,
+} from '@/lib/media-policy'
 
 function safeName(name: string) {
   const base = name.replace(/\.[^.]+$/, '')
@@ -74,31 +66,19 @@ export async function POST(request: NextRequest) {
     if (!(file instanceof File)) {
       return Response.json({ message: 'Choose an image, video, or PDF to upload.' }, { status: 400 })
     }
-    if (!SUPPORTED_TYPES.has(file.type)) {
-      return Response.json({ message: 'Upload a JPEG, PNG, WebP, MP4, MOV, or PDF file.' }, { status: 415 })
-    }
-    const isVideo = file.type.startsWith('video/')
-    const isDocument = file.type === 'application/pdf'
-    const maxBytes = isVideo
-      ? MAX_VIDEO_BYTES
-      : isDocument
-        ? MAX_DOCUMENT_BYTES
-        : MAX_IMAGE_BYTES
-    if (file.size < 1 || file.size > maxBytes) {
-      return Response.json({
-        message: isVideo
-          ? 'The video must be smaller than 50 MB.'
-          : isDocument
-            ? 'The PDF must be smaller than 25 MB.'
-            : 'The image must be smaller than 10 MB.',
-      }, { status: 413 })
+    try {
+      validateMediaFile(file)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The selected media file is not supported.'
+      const status = SUPPORTED_MEDIA_TYPES.has(file.type) ? 413 : 415
+      return Response.json({ message }, { status })
     }
 
-    const extension = SUPPORTED_TYPES.get(file.type)!
+    const extension = SUPPORTED_MEDIA_TYPES.get(file.type)!
     const key = `${companyMediaPrefix(user.company_id)}${crypto.randomUUID()}-${safeName(file.name)}.${extension}`
     const bucket = await getMediaBucket()
 
-    await bucket.put(key, await file.arrayBuffer(), {
+    await bucket.put(key, file.stream(), {
       httpMetadata: {
         contentType: file.type,
         cacheControl: 'public, max-age=31536000, immutable',

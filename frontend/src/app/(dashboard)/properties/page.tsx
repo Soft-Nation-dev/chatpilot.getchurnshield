@@ -22,6 +22,7 @@ import { useAuth } from '@/context/auth-context'
 import api from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { uploadMedia } from '@/lib/media-client'
+import { MEDIA_LIMIT_SUMMARY, PROPERTY_MEDIA_ACCEPT } from '@/lib/media-policy'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -96,6 +97,27 @@ const emptyForm: FormState = {
   image_urls: [], video_url: '', status: 'available',
 }
 
+type StoredPropertyDraft = {
+  editingId: number | null
+  form: FormState
+  savedAt: string
+}
+
+function draftKey(companyId: number) {
+  return `property-vault-draft:${companyId}`
+}
+
+function hasDraftContent(form: FormState) {
+  return Boolean(
+    form.title.trim() ||
+    form.description.trim() ||
+    form.property_type.trim() ||
+    form.location.trim() ||
+    form.image_urls.length ||
+    form.video_url,
+  )
+}
+
 const statusClass: Record<string, string> = {
   available: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   reserved: 'border-amber-200 bg-amber-50 text-amber-700',
@@ -158,6 +180,7 @@ export default function PropertyVaultPage() {
   const [generatedDraft, setGeneratedDraft] = useState<GeneratedDraft | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [draftReady, setDraftReady] = useState(false)
 
   const load = useCallback(async () => {
     if (!companyId) return
@@ -172,6 +195,47 @@ export default function PropertyVaultPage() {
   }, [companyId])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    if (!companyId) return
+    setDraftReady(false)
+    try {
+      const raw = window.sessionStorage.getItem(draftKey(companyId))
+      if (raw) {
+        const stored = JSON.parse(raw) as StoredPropertyDraft
+        if (stored?.form && typeof stored.form === 'object') {
+          const restored = {
+            ...emptyForm,
+            ...stored.form,
+            image_urls: Array.isArray(stored.form.image_urls)
+              ? stored.form.image_urls.filter(item => typeof item === 'string')
+              : [],
+          }
+          setForm(restored)
+          setEditingId(Number.isInteger(stored.editingId) ? stored.editingId : null)
+          if (hasDraftContent(restored)) setNotice('Your unsaved property draft was restored.')
+        }
+      }
+    } catch {
+      window.sessionStorage.removeItem(draftKey(companyId))
+    } finally {
+      setDraftReady(true)
+    }
+  }, [companyId])
+
+  useEffect(() => {
+    if (!companyId || !draftReady) return
+    if (!hasDraftContent(form) && editingId === null) {
+      window.sessionStorage.removeItem(draftKey(companyId))
+      return
+    }
+    const draft: StoredPropertyDraft = {
+      editingId,
+      form,
+      savedAt: new Date().toISOString(),
+    }
+    window.sessionStorage.setItem(draftKey(companyId), JSON.stringify(draft))
+  }, [companyId, draftReady, editingId, form])
 
   const stats = useMemo(() => ({
     available: properties.filter(item => item.status === 'available').length,
@@ -209,8 +273,9 @@ export default function PropertyVaultPage() {
 
   const reset = () => {
     setEditingId(null)
-    setForm(emptyForm)
+    setForm({ ...emptyForm, image_urls: [] })
     setError('')
+    if (companyId) window.sessionStorage.removeItem(draftKey(companyId))
   }
 
   const submit = async (event: FormEvent) => {
@@ -414,7 +479,7 @@ export default function PropertyVaultPage() {
           <div className="space-y-2"><Label htmlFor="features">Features and amenities</Label><Textarea id="features" value={form.features} onChange={event => update('features', event.target.value)} rows={2} placeholder="Swimming pool, fitted kitchen, parking, security…" /></div>
 
           <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3"><div><Label>Property media *</Label><p className="mt-1 text-xs text-slate-400">Up to 10 images and one short MP4/MOV tour. Images are used for automatic Instagram feed posts.</p></div><input ref={inputRef} type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime" onChange={upload} className="sr-only" /><Button type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={uploading}>{uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}{uploading ? 'Uploading…' : 'Upload media'}</Button></div>
+            <div className="flex flex-wrap items-center justify-between gap-3"><div><Label>Property media *</Label><p className="mt-1 text-xs text-slate-400">Up to 10 images and one short MP4/MOV tour. {MEDIA_LIMIT_SUMMARY}. Images are used for automatic Instagram feed posts.</p></div><input ref={inputRef} type="file" multiple accept={PROPERTY_MEDIA_ACCEPT} onChange={upload} className="sr-only" /><Button type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={uploading}>{uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}{uploading ? 'Uploading…' : 'Upload media'}</Button></div>
             {!!form.image_urls.length && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">{form.image_urls.map((url, index) => <div key={url} className="group relative aspect-square overflow-hidden rounded-xl border border-slate-200 bg-slate-100"><img src={url} alt={`Property image ${index + 1}`} className="h-full w-full object-cover" /><button type="button" onClick={() => update('image_urls', form.image_urls.filter(item => item !== url))} className="absolute right-1.5 top-1.5 rounded-full bg-white/90 p-1 text-red-600 shadow"><X className="h-3.5 w-3.5" /></button>{index === 0 && <span className="absolute bottom-1.5 left-1.5 rounded bg-slate-900/75 px-2 py-0.5 text-[10px] font-medium text-white">Cover</span>}</div>)}</div>}
             {form.video_url && <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700"><span className="inline-flex min-w-0 items-center gap-2"><Film className="h-4 w-4 shrink-0" /><span className="truncate">Video tour attached</span></span><button type="button" onClick={() => update('video_url', '')}><X className="h-4 w-4" /></button></div>}
             {!form.image_urls.length && !form.video_url && <button type="button" onClick={() => inputRef.current?.click()} className="flex min-h-28 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 text-slate-500"><ImagePlus className="h-6 w-6 text-emerald-600" /><span className="mt-2 text-sm font-medium">Add photos or a video tour</span></button>}

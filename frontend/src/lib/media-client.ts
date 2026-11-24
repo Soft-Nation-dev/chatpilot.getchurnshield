@@ -1,4 +1,5 @@
 import { getAccessToken } from './auth'
+import { validateMediaFile } from './media-policy'
 
 export type MediaItem = {
   key: string
@@ -24,6 +25,7 @@ async function message(response: Response, fallback: string) {
 }
 
 export async function uploadMedia(file: File): Promise<MediaItem> {
+  validateMediaFile(file)
   const form = new FormData()
   form.append('file', file)
   const response = await fetch('/api/media', {
@@ -36,6 +38,16 @@ export async function uploadMedia(file: File): Promise<MediaItem> {
   }
   const body = await response.json() as { item: MediaItem }
   return body.item
+}
+
+export async function deleteMedia(key: string): Promise<void> {
+  const response = await fetch(`/api/media?key=${encodeURIComponent(key)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  if (!response.ok) {
+    throw new Error(await message(response, 'Could not delete this media file.'))
+  }
 }
 
 export async function listMedia(): Promise<MediaItem[]> {

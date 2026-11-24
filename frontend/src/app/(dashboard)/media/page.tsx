@@ -15,25 +15,13 @@ import {
   UploadCloud,
 } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
-import { getAccessToken } from '@/lib/auth'
-
-type MediaItem = {
-  key: string
-  name: string
-  size: number
-  uploadedAt: string
-  contentType: string
-  url: string
-}
-
-async function responseMessage(response: Response, fallback: string) {
-  try {
-    const body = await response.json() as { message?: string }
-    return body.message || fallback
-  } catch {
-    return fallback
-  }
-}
+import {
+  deleteMedia,
+  listMedia,
+  MediaItem,
+  uploadMedia,
+} from '@/lib/media-client'
+import { MEDIA_ACCEPT, MEDIA_LIMIT_SUMMARY } from '@/lib/media-policy'
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
@@ -52,18 +40,10 @@ export default function MediaLibraryPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
-  const authHeaders = (): Record<string, string> => {
-    const token = getAccessToken()
-    return token ? { Authorization: `Bearer ${token}` } : {}
-  }
-
   const load = useCallback(async () => {
     setError('')
     try {
-      const response = await fetch('/api/media', { headers: authHeaders(), cache: 'no-store' })
-      if (!response.ok) throw new Error(await responseMessage(response, 'Could not load your media library.'))
-      const body = await response.json() as { items?: MediaItem[] }
-      setItems(Array.isArray(body.items) ? body.items : [])
+      setItems(await listMedia())
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load your media library.')
     } finally {
@@ -81,16 +61,8 @@ export default function MediaLibraryPage() {
     setError('')
     setNotice('')
     try {
-      const form = new FormData()
-      form.append('file', file)
-      const response = await fetch('/api/media', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: form,
-      })
-      if (!response.ok) throw new Error(await responseMessage(response, 'Could not upload the media file.'))
-      const body = await response.json() as { item: MediaItem }
-      setItems(current => [body.item, ...current.filter(item => item.key !== body.item.key)])
+      const item = await uploadMedia(file)
+      setItems(current => [item, ...current.filter(existing => existing.key !== item.key)])
       setNotice(
         file.type === 'application/pdf'
           ? 'PDF uploaded. Property extraction and deduplication are running in the background.'
@@ -130,11 +102,7 @@ export default function MediaLibraryPage() {
     setError('')
     setNotice('')
     try {
-      const response = await fetch(`/api/media?key=${encodeURIComponent(item.key)}`, {
-        method: 'DELETE',
-        headers: authHeaders(),
-      })
-      if (!response.ok) throw new Error(await responseMessage(response, 'Could not delete the image.'))
+      await deleteMedia(item.key)
       setItems(current => current.filter(existing => existing.key !== item.key))
       setNotice('Image deleted.')
     } catch (cause) {
@@ -180,7 +148,7 @@ export default function MediaLibraryPage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm lg:p-6">
-        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,application/pdf" onChange={handleFile} className="sr-only" />
+        <input ref={inputRef} type="file" accept={MEDIA_ACCEPT} onChange={handleFile} className="sr-only" />
         <div
           onDragEnter={event => { event.preventDefault(); setDragging(true) }}
           onDragOver={event => event.preventDefault()}
@@ -190,7 +158,7 @@ export default function MediaLibraryPage() {
         >
           {uploading ? <Loader2 className="h-9 w-9 animate-spin text-emerald-600" /> : <UploadCloud className="h-9 w-9 text-emerald-600" />}
           <h3 className="mt-4 font-semibold text-slate-900">{uploading ? 'Uploading your media…' : 'Drop an image, video, or property PDF here'}</h3>
-          <p className="mt-1 text-sm text-slate-500">Images up to 10 MB · PDF up to 25 MB · MP4/MOV video up to 50 MB</p>
+          <p className="mt-1 text-sm text-slate-500">{MEDIA_LIMIT_SUMMARY}</p>
           <Button className="mt-5" type="button" onClick={() => inputRef.current?.click()} disabled={uploading}>
             {uploading ? 'Please wait' : 'Choose image'}
           </Button>
