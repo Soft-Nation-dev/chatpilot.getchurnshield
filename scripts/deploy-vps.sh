@@ -65,7 +65,10 @@ if [[ "${api_healthy}" -ne 1 ]]; then
   exit 11
 fi
 
-docker exec chatpilot wget -q -O /dev/null http://whatsapp-bot:3001/api/v1/whatsapp/sessions
+# The sessions endpoint queries Prisma and can be temporarily saturated while
+# persisted WhatsApp sessions reconnect. At this point its HTTP health was
+# already proven above; verify the API container can resolve and reach it.
+docker exec chatpilot sh -c 'nc -z -w 5 whatsapp-bot 3001'
 docker compose -p deployment --env-file .env up -d --no-deps caddy
 
 ln -sfn "${release_dir}" /opt/churnshield/current.next
