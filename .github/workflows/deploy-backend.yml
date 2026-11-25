@@ -37,13 +37,14 @@ jobs:
 
       - name: Validate API
         shell: bash
+        working-directory: ChatPilot
         env:
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/churnshield_ci
         run: |
-          npm --prefix ChatPilot ci
-          npm --prefix ChatPilot exec -- prisma generate
-          npm --prefix ChatPilot test -- --runInBand
-          npm --prefix ChatPilot run build
+          npm ci
+          npm exec -- prisma generate
+          npm test -- --runInBand
+          npm run build
 
       - name: Validate WhatsApp gateway
         shell: bash
