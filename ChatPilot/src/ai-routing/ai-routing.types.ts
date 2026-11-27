@@ -9,6 +9,7 @@ export enum AiWorkload {
   MediaIndex = 'media-index',
   Learning = 'learning',
   Prompt = 'prompt',
+  BuyerFinder = 'buyer-finder',
 }
 
 export type AiProviderName = 'cloudflare' | 'groq' | 'google'

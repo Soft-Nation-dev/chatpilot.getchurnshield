@@ -36,6 +36,10 @@ export const scraperConfig = {
     fbPagesActor: str('APIFY_FB_PAGES_ACTOR', 'apify/facebook-pages-scraper'),
     twitterActor: str('APIFY_TWITTER_ACTOR', 'apidojo/tweet-scraper'),
     instagramActor: str('APIFY_INSTAGRAM_ACTOR', 'apify/instagram-scraper'),
+    fbCommentsActor: str(
+      'APIFY_FB_COMMENTS_ACTOR',
+      'apify/facebook-comments-scraper',
+    ),
     tiktokActor: str('APIFY_TIKTOK_ACTOR', 'clockworks/tiktok-scraper'),
     postsActor: str('APIFY_FB_POSTS_ACTOR', 'apify/facebook-posts-scraper'),
     browserActor: str('APIFY_BROWSER_ACTOR', 'apify/website-content-crawler'),
@@ -47,6 +51,18 @@ export const scraperConfig = {
     ]),
     location: str('SEARCH_LOCATION', 'Nigeria'),
     maxResults: num('MAX_RESULTS', 25),
+    buyerFinderMaxAccountsPerState: num(
+      'BUYER_FINDER_MAX_ACCOUNTS_PER_STATE',
+      15,
+    ),
+    buyerFinderMaxPostsPerAccount: num(
+      'BUYER_FINDER_MAX_POSTS_PER_ACCOUNT',
+      10,
+    ),
+    buyerFinderMaxCommentsPerPost: num(
+      'BUYER_FINDER_MAX_COMMENTS_PER_POST',
+      50,
+    ),
     enabledSources: csv('ENABLED_SOURCES', [
       'npc',
       'nairaland',

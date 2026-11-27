@@ -26,6 +26,7 @@ import { ContentModule } from './content/content.module'
 import { LearningModule } from './learning/learning.module'
 import { AiRoutingModule } from './ai-routing/ai-routing.module'
 import { NotificationsModule } from './notifications/notifications.module'
+import { BuyerFinderModule } from './buyer-finder/buyer-finder.module'
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { NotificationsModule } from './notifications/notifications.module'
     SocialModule,
     ContentModule,
     LearningModule,
+    BuyerFinderModule,
   ],
   controllers: [AppController],
   providers: [

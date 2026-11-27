@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error'
 import { AlertTriangle, CheckCircle2, Clock3, RefreshCw } from 'lucide-react'
+import { BuyerFinderDiscoveryPanel } from '@/components/buyer-finder/buyer-finder-discovery-panel'
 
 const STATUSES = ['all', 'new', 'qualified', 'nurturing', 'handoff', 'closed', 'disqualified']
 const CHAT_STATE_LABELS: Record<string, string> = {
@@ -151,8 +152,8 @@ export default function LeadsPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">Leads</h2>
-          <p className="mt-1 text-muted-foreground">{leads.length} leads</p>
+          <h2 className="text-2xl font-bold text-foreground">Buyer Finder</h2>
+          <p className="mt-1 text-muted-foreground">Discover and work high-intent property buyers.</p>
         </div>
       </div>
 
@@ -167,6 +168,8 @@ export default function LeadsPage() {
           {error || notice}
         </div>
       )}
+
+      <BuyerFinderDiscoveryPanel />
 
       <div className="grid gap-4 xl:grid-cols-[1fr_1.4fr]">
         <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
@@ -230,7 +233,7 @@ export default function LeadsPage() {
               return <TableRow key={lead.id} className="hover:bg-slate-50">
                 <TableCell><input type="checkbox" aria-label={`Select ${lead.name || 'lead'}`} checked={selectedIds.includes(lead.id)} onChange={() => toggleSelected(lead.id)} className="accent-emerald-600" /></TableCell>
                 <TableCell>
-                  <button onClick={() => router.push(`/leads/${lead.id}`)} className="font-medium text-emerald-700 hover:underline">
+                    <button onClick={() => router.push(`/buyer-finder/${lead.id}`)} className="font-medium text-emerald-700 hover:underline">
                     {lead.name || 'Unknown'}
                   </button>
                 </TableCell>

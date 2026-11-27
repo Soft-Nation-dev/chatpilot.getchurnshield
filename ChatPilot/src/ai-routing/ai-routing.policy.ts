@@ -52,6 +52,15 @@ export function candidatesForWorkload(
     ])
   }
 
+  // Buyer Finder is high-volume background classification. Keep Gemini
+  // reserved for live customer conversations as requested by the product.
+  if (workload === AiWorkload.BuyerFinder) {
+    return candidates([
+      ['cloudflare', CLOUDFLARE_BACKGROUND, 18_000],
+      ['groq', GROQ_BACKGROUND, 12_000],
+    ])
+  }
+
   return candidates([
     ['cloudflare', CLOUDFLARE_BACKGROUND, 18_000],
     ['groq', GROQ_BACKGROUND, 12_000],

@@ -112,6 +112,49 @@ export interface LeadUsage {
   daily_remaining: number
 }
 
+export interface BuyerFinderSettings {
+  id: number
+  company_id: number
+  enabled: boolean
+  shadow_mode: boolean
+  target_states: string[]
+  exclusivity_limit: number
+  min_intent_score: number
+  daily_outreach_limit: number
+  global_enabled: boolean
+  operating_mode: 'off' | 'shadow' | 'live'
+  last_discovery_at: string | null
+  last_scan_at: string | null
+}
+
+export interface BuyerFinderCandidate {
+  id: number
+  status: 'shadow' | 'allocated' | 'contacted' | 'dismissed' | 'suppressed'
+  allocated_at: string
+  contacted_at: string | null
+  lead_id: number | null
+  prospect: {
+    name: string | null
+    handle: string | null
+    profile_url: string | null
+    phone: string | number | null
+  }
+  channel: 'whatsapp' | 'instagram' | 'facebook'
+  location_state: string | null
+  intent_score: number
+  intent_reason: string | null
+  dm_script: string | null
+  whatsapp_script: string | null
+  comment: string
+  post: {
+    url: string
+    caption: string | null
+    property_type: string | null
+    specific_location: string | null
+    published_at: string | null
+  }
+}
+
 export interface BusinessDetails {
   description?: string
   industry?: string
