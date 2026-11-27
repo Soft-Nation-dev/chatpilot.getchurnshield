@@ -139,7 +139,7 @@ export interface BuyerFinderSettings {
 
 export interface BuyerFinderCandidate {
   id: number
-  status: 'shadow' | 'allocated' | 'contacted' | 'dismissed' | 'suppressed'
+  status: 'shadow' | 'allocated' | 'contacted' | 'dismissed' | 'suppressed' | 'wrong_match'
   allocated_at: string
   contacted_at: string | null
   lead_id: number | null
@@ -168,6 +168,28 @@ export interface BuyerFinderCandidate {
     name: string | null
     platform: 'facebook' | 'instagram'
   }
+}
+
+export interface BuyerFinderStatus {
+  last_successful_scan: string | null
+  queue: {
+    waiting: number
+    active: number
+    delayed: number
+    failed: number
+  }
+  sources: BuyerFinderSettings['sources']
+  recent_runs: Array<{
+    id: number
+    kind: string
+    status: 'running' | 'succeeded' | 'failed'
+    attempt: number
+    max_attempts: number
+    summary: Record<string, unknown> | null
+    error_message: string | null
+    started_at: string
+    completed_at: string | null
+  }>
 }
 
 export interface BusinessDetails {

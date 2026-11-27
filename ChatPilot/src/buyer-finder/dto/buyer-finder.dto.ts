@@ -56,6 +56,7 @@ export class BuyerFinderActionDto {
     'contacted',
     'dismissed',
     'do_not_contact',
+    'wrong_match',
   ])
   action: string
 
@@ -71,7 +72,15 @@ export class BuyerFinderFeedQueryDto {
   channel?: string
 
   @IsOptional()
-  @IsIn(['all', 'shadow', 'allocated', 'contacted', 'dismissed', 'suppressed'])
+  @IsIn([
+    'all',
+    'shadow',
+    'allocated',
+    'contacted',
+    'dismissed',
+    'suppressed',
+    'wrong_match',
+  ])
   status?: string
 
   @IsOptional()

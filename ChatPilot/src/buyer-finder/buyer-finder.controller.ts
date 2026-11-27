@@ -87,6 +87,26 @@ export class BuyerFinderController {
     return this.buyerFinder.usage(companyId)
   }
 
+  @Get('status')
+  @ApiOperation({ summary: 'Get Buyer Finder source and scan run status' })
+  async status(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) companyId: number,
+  ) {
+    await this.authorize(req, companyId)
+    return this.buyerFinder.status(companyId)
+  }
+
+  @Post('scan')
+  @ApiOperation({ summary: 'Queue a safe Buyer Finder scan now' })
+  async scan(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) companyId: number,
+  ) {
+    await this.authorize(req, companyId)
+    return this.buyerFinder.requestScan(companyId)
+  }
+
   @Post('allocations/:allocationId/actions')
   @ApiOperation({ summary: 'Record a safe Buyer Finder outreach action' })
   async action(

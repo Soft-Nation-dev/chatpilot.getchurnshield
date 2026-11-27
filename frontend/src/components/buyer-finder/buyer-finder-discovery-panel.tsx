@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ExternalLink, MapPin, MessageCircle, Search, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Clock, ExternalLink, MapPin, MessageCircle, RefreshCw, Search, ShieldCheck } from 'lucide-react'
 import api from '@/lib/api'
 import { getErrorMessage } from '@/lib/error'
 import { useAuth } from '@/context/auth-context'
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import type { BuyerFinderCandidate, BuyerFinderSettings } from '@/lib/types'
+import type { BuyerFinderCandidate, BuyerFinderSettings, BuyerFinderStatus } from '@/lib/types'
 
 const STATES = [
   'Lagos',
@@ -37,6 +37,7 @@ export function BuyerFinderDiscoveryPanel() {
   const [feed, setFeed] = useState<BuyerFinderCandidate[]>([])
   const [channel, setChannel] = useState<(typeof CHANNELS)[number]>('all')
   const [usage, setUsage] = useState({ used: 0, limit: 25, remaining: 25 })
+  const [status, setStatus] = useState<BuyerFinderStatus | null>(null)
   const [drafts, setDrafts] = useState<Record<number, string>>({})
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
@@ -45,16 +46,18 @@ export function BuyerFinderDiscoveryPanel() {
   const load = useCallback(async () => {
     if (!companyId) return
     try {
-      const [settingsResponse, feedResponse, usageResponse] = await Promise.all([
+      const [settingsResponse, feedResponse, usageResponse, statusResponse] = await Promise.all([
         api.get(`/companies/${companyId}/buyer-finder/settings`),
         api.get(`/companies/${companyId}/buyer-finder/feed`, {
           params: { channel, limit: 50 },
         }),
         api.get(`/companies/${companyId}/buyer-finder/usage`),
+        api.get(`/companies/${companyId}/buyer-finder/status`),
       ])
       setSettings(settingsResponse.data)
       setFeed(Array.isArray(feedResponse.data) ? feedResponse.data : [])
       setUsage(usageResponse.data)
+      setStatus(statusResponse.data)
       setDrafts(current => {
         const next = { ...current }
         for (const candidate of feedResponse.data || []) {
@@ -130,6 +133,46 @@ export function BuyerFinderDiscoveryPanel() {
     }
   }
 
+  const toggleDiscovery = async (enabled: boolean) => {
+    if (!companyId || !settings || saving) return
+    setSaving(true)
+    setError('')
+    setNotice('')
+    setSettings({ ...settings, enabled, shadow_mode: true })
+    try {
+      await api.put(`/companies/${companyId}/buyer-finder/settings`, {
+        enabled,
+        shadow_mode: true,
+      })
+      setNotice(
+        enabled
+          ? 'Buyer Finder is active in Shadow Review. It will find opportunities but cannot contact anyone.'
+          : 'Buyer Finder discovery is paused.',
+      )
+      await load()
+    } catch (cause) {
+      setError(getErrorMessage(cause, 'Could not update Buyer Finder discovery'))
+      await load()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const scanNow = async () => {
+    if (!companyId || saving) return
+    setSaving(true)
+    setError('')
+    try {
+      await api.post(`/companies/${companyId}/buyer-finder/scan`)
+      setNotice('Scan queued. Buyer Finder will retry automatically if a source temporarily fails.')
+      await load()
+    } catch (cause) {
+      setError(getErrorMessage(cause, 'Could not queue Buyer Finder scan'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const record = async (candidate: BuyerFinderCandidate, action: string) => {
     if (!companyId) return false
     try {
@@ -137,7 +180,7 @@ export function BuyerFinderDiscoveryPanel() {
         action,
         script: drafts[candidate.id] || undefined,
       })
-      if (['contacted', 'dismissed', 'do_not_contact'].includes(action)) await load()
+      if (['contacted', 'dismissed', 'do_not_contact', 'wrong_match'].includes(action)) await load()
       return true
     } catch (cause) {
       setError(getErrorMessage(cause, 'Could not record Buyer Finder action'))
@@ -170,6 +213,12 @@ export function BuyerFinderDiscoveryPanel() {
   }
 
   if (!settings) return null
+
+  const lastRun = status?.recent_runs[0]
+  const lastFailure = status?.recent_runs.find(run => run.status === 'failed')
+  const sourceFailure = status?.sources.accounts.find(account => account.error)
+  const formatTime = (value: string | null | undefined) =>
+    value ? new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Not run yet'
 
   return (
     <div className="space-y-4">
@@ -230,6 +279,41 @@ export function BuyerFinderDiscoveryPanel() {
           </div>
         </div>
 
+        <div className="mt-3 grid gap-2 rounded-xl border border-slate-100 p-3 text-xs text-slate-500 sm:grid-cols-[1fr_auto]">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Last successful scan: {formatTime(status?.last_successful_scan)}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                Latest run:{' '}
+                {lastRun ? `${lastRun.status} · attempt ${lastRun.attempt}/${lastRun.max_attempts}` : 'not started'}
+              </span>
+              {status?.queue.active || status?.queue.waiting || status?.queue.delayed ? (
+                <span>
+                  {(status.queue.active || 0) + (status.queue.waiting || 0) + (status.queue.delayed || 0)} queued or
+                  running
+                </span>
+              ) : null}
+            </div>
+            {(sourceFailure || lastFailure) && (
+              <div className="flex items-start gap-2 text-amber-700">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  {sourceFailure?.error ||
+                    lastFailure?.error_message ||
+                    'A source failed; automatic retry is scheduled.'}
+                </span>
+              </div>
+            )}
+          </div>
+          <Button size="sm" variant="outline" onClick={scanNow} disabled={saving || !settings.enabled}>
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            Scan now
+          </Button>
+        </div>
+
         <div className="mt-5 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Target states</p>
@@ -252,17 +336,14 @@ export function BuyerFinderDiscoveryPanel() {
                 <span className="block text-sm font-medium text-slate-700">Enable discovery</span>
                 <span className="block text-xs text-slate-400">Requires the production safety lock</span>
               </span>
-              <Switch checked={settings.enabled} onCheckedChange={enabled => setSettings({ ...settings, enabled })} />
+              <Switch checked={settings.enabled} disabled={saving} onCheckedChange={toggleDiscovery} />
             </label>
             <label className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
               <span>
                 <span className="block text-sm font-medium text-slate-700">Shadow review</span>
-                <span className="block text-xs text-slate-400">Find leads without allowing outreach</span>
+                <span className="block text-xs text-slate-400">Locked on for the pilot: find only, never contact</span>
               </span>
-              <Switch
-                checked={settings.shadow_mode}
-                onCheckedChange={shadow_mode => setSettings({ ...settings, shadow_mode })}
-              />
+              <Switch checked disabled />
             </label>
           </div>
         </div>
@@ -390,6 +471,17 @@ export function BuyerFinderDiscoveryPanel() {
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => record(candidate, 'dismissed')}>
                     Dismiss
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => record(candidate, 'wrong_match')}>
+                    Wrong Match
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => record(candidate, 'do_not_contact')}
+                  >
+                    Do Not Contact
                   </Button>
                 </div>
               </article>

@@ -25,6 +25,30 @@ export class BuyerFinderProcessor extends WorkerHost {
     if (!buyerFinderGloballyEnabled()) {
       return { skipped: true, reason: 'global_kill_switch' }
     }
+    const tracked = [
+      BuyerFinderJobKind.DISCOVER,
+      BuyerFinderJobKind.SCAN,
+    ].includes(job.name as BuyerFinderJobKind)
+    const run = tracked
+      ? await this.ingestion.startRun({
+          kind: job.name,
+          jobId: String(job.id || ''),
+          attempt: job.attemptsMade + 1,
+          maxAttempts: Number(job.opts.attempts) || 1,
+        })
+      : null
+
+    try {
+      const result = await this.execute(job)
+      if (run) await this.ingestion.completeRun(run.id, result)
+      return result
+    } catch (error) {
+      if (run) await this.ingestion.failRun(run.id, error)
+      throw error
+    }
+  }
+
+  private async execute(job: Job): Promise<any> {
     if (job.name === BuyerFinderJobKind.DISCOVER) {
       return this.ingestion.discover()
     }

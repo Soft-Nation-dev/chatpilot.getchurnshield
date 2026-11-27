@@ -466,6 +466,23 @@ model buyer_finder_outreach_events {
   @@index([allocation_id, created_at])
 }
 
+model buyer_finder_runs {
+  id            Int       @id @default(autoincrement())
+  kind          String    @db.VarChar(40)
+  status        String    @db.VarChar(20)
+  job_id        String?   @db.VarChar(120)
+  attempt       Int       @default(1)
+  max_attempts  Int       @default(1)
+  summary       Json?
+  error_message String?
+  started_at    DateTime  @default(now()) @db.Timestamptz(6)
+  completed_at  DateTime? @db.Timestamptz(6)
+
+  @@index([kind, started_at])
+  @@index([status, started_at])
+  @@index([job_id, attempt])
+}
+
 model lead_requests {
   id         Int       @id @default(autoincrement())
   company_id Int

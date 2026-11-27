@@ -24,7 +24,8 @@ Meta access tokens remain encrypted in `social_accounts`; Buyer Finder stores
 only the account relationship and never copies a token into its own tables.
 
 In shadow mode, candidates are visible for review but WhatsApp/profile outreach
-actions are blocked by the API. This must remain enabled for the first pilot.
+actions are blocked by the API. The pilot currently enforces shadow mode on the
+server even if a client submits a different value.
 
 ## Scheduled work
 
@@ -32,6 +33,10 @@ actions are blocked by the API. This must remain enabled for the first pilot.
 - Recent post and comment scan: every 30 minutes.
 - Qualification: one BullMQ job per new, deduplicated comment.
 - Queue concurrency: one, preventing duplicate allocations inside one deployment.
+- Allocation also uses a PostgreSQL advisory transaction lock and serializable
+  isolation, preventing duplicate/excess allocation across multiple workers.
+- Scan and discovery jobs retry up to three times with exponential backoff and
+  persist each attempt for the dashboard status panel.
 
 Connected sources are read through the Meta Graph API using the company's Page
 token. Owned-source candidates are allocated only to that company. Posts older
@@ -59,6 +64,11 @@ Deterministic intent rules remain available if both providers are unavailable.
    and set `SCRAPING_ENABLED=true`.
 7. Review the first 100 candidates for accuracy, duplicates, source quality, and
    cost before disabling Shadow review.
+
+The discovery switch saves immediately. Receiving companies get an in-app
+notification for each newly allocated high-intent candidate. Reviewers can mark
+results as Contacted, Dismissed, Wrong Match, or Do Not Contact; the latter two
+are stored as auditable feedback events.
 
 Recommended pilot limits:
 

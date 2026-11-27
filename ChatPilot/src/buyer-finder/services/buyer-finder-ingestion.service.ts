@@ -22,6 +22,48 @@ export class BuyerFinderIngestionService {
     private readonly connectedSource: BuyerFinderConnectedSourceService,
   ) {}
 
+  startRun(input: {
+    kind: string
+    jobId: string
+    attempt: number
+    maxAttempts: number
+  }) {
+    return this.prisma.buyer_finder_runs.create({
+      data: {
+        kind: input.kind,
+        status: 'running',
+        job_id: input.jobId || null,
+        attempt: input.attempt,
+        max_attempts: input.maxAttempts,
+      },
+    })
+  }
+
+  completeRun(runId: number, summary: unknown) {
+    return this.prisma.buyer_finder_runs.update({
+      where: { id: runId },
+      data: {
+        status: 'succeeded',
+        summary: summary as any,
+        completed_at: new Date(),
+      },
+    })
+  }
+
+  failRun(runId: number, error: unknown) {
+    return this.prisma.buyer_finder_runs.update({
+      where: { id: runId },
+      data: {
+        status: 'failed',
+        error_message: (error instanceof Error
+          ? error.message
+          : String(error)
+        ).slice(0, 2000),
+        completed_at: new Date(),
+      },
+    })
+  }
+
   async discover(): Promise<{
     states: number
     accounts: number

@@ -3,8 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
+import { InjectQueue } from '@nestjs/bullmq'
+import { Queue } from 'bullmq'
 import { PrismaService } from '../../prisma/prisma.service'
 import {
+  BUYER_FINDER_QUEUE,
+  BuyerFinderJobKind,
   buyerFinderGloballyEnabled,
   buyerFinderPublicDiscoveryEnabled,
 } from '../buyer-finder.constants'
@@ -15,6 +19,7 @@ export class BuyerFinderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly connectedSource: BuyerFinderConnectedSourceService,
+    @InjectQueue(BUYER_FINDER_QUEUE) private readonly queue: Queue,
   ) {}
 
   async getSettings(companyId: number) {
@@ -60,15 +65,19 @@ export class BuyerFinderService {
     if (targetStates && !targetStates.length) {
       throw new BadRequestException('Select at least one target state')
     }
+    const safeInput = {
+      ...input,
+      ...(input.enabled === true ? { shadow_mode: true } : {}),
+    }
     return this.prisma.buyer_finder_settings.upsert({
       where: { company_id: companyId },
       create: {
         company_id: companyId,
-        ...input,
+        ...safeInput,
         ...(targetStates ? { target_states: targetStates } : {}),
       },
       update: {
-        ...input,
+        ...safeInput,
         ...(targetStates ? { target_states: targetStates } : {}),
       },
     })
@@ -155,6 +164,52 @@ export class BuyerFinderService {
     }
   }
 
+  async status(companyId: number) {
+    const [settings, runs, queueCounts] = await Promise.all([
+      this.getSettings(companyId),
+      this.prisma.buyer_finder_runs.findMany({
+        where: {
+          kind: {
+            in: [BuyerFinderJobKind.SCAN, BuyerFinderJobKind.DISCOVER],
+          },
+        },
+        orderBy: { started_at: 'desc' },
+        take: 8,
+      }),
+      this.queue.getJobCounts('waiting', 'active', 'delayed', 'failed'),
+    ])
+    return {
+      last_successful_scan: settings.last_scan_at,
+      queue: queueCounts,
+      sources: settings.sources,
+      recent_runs: runs,
+    }
+  }
+
+  async requestScan(companyId: number) {
+    const settings = await this.getSettings(companyId)
+    if (!buyerFinderGloballyEnabled()) {
+      throw new BadRequestException('Buyer Finder production switch is off')
+    }
+    if (!settings.enabled) {
+      throw new BadRequestException(
+        'Enable Buyer Finder before requesting a scan',
+      )
+    }
+    const job = await this.queue.add(
+      BuyerFinderJobKind.SCAN,
+      { requestedByCompanyId: companyId },
+      {
+        jobId: `buyer-finder-manual-${companyId}-${Date.now()}`,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30_000 },
+        removeOnComplete: 100,
+        removeOnFail: 100,
+      },
+    )
+    return { queued: true, job_id: String(job.id) }
+  }
+
   async recordAction(
     companyId: number,
     allocationId: number,
@@ -182,7 +237,9 @@ export class BuyerFinderService {
           ? { status: 'dismissed', dismissed_at: now }
           : input.action === 'do_not_contact'
             ? { status: 'suppressed', dismissed_at: now }
-            : null
+            : input.action === 'wrong_match'
+              ? { status: 'wrong_match', dismissed_at: now }
+              : null
 
     const operations: any[] = [
       this.prisma.buyer_finder_outreach_events.create({
@@ -191,6 +248,12 @@ export class BuyerFinderService {
           action: input.action,
           channel: allocation.candidate.channel,
           script: input.script?.trim() || null,
+          metadata:
+            input.action === 'wrong_match'
+              ? { feedback: 'user_marked_wrong_match' }
+              : input.action === 'do_not_contact'
+                ? { feedback: 'do_not_contact' }
+                : undefined,
         },
       }),
     ]
