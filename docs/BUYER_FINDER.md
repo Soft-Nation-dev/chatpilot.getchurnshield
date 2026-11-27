@@ -1,33 +1,42 @@
 # Buyer Finder
 
-Buyer Finder discovers high-intent public property enquiries, classifies them,
-and allocates each qualified opportunity to an eligible GetChurnShield company.
+Buyer Finder reads high-intent property enquiries from each company's connected
+Facebook Pages and Instagram professional accounts, classifies them, and keeps
+those opportunities exclusive to the company that owns the social account.
+Public discovery is used only as a fallback for companies without a healthy
+connected Meta source.
 It reuses the existing Leads, Contacts, WhatsApp, AI routing, PostgreSQL, Redis,
 and BullMQ infrastructure.
 
 ## Safety model
 
-Buyer Finder has three independent controls:
+Buyer Finder has separate controls for connected accounts and paid fallback:
 
-1. `SCRAPING_ENABLED=true` permits outbound scraper calls globally.
-2. `BUYER_FINDER_ENABLED=true` permits Buyer Finder jobs globally.
-3. Each company must enable Buyer Finder in its dashboard settings.
+1. `BUYER_FINDER_ENABLED=true` permits Buyer Finder jobs and connected Meta
+   account reads globally.
+2. Each company must enable Buyer Finder in its dashboard settings.
+3. `SCRAPING_ENABLED=true` plus `APIFY_TOKEN` permit paid public fallback.
 
-Both environment switches and the company switch must be enabled before an
-Apify Actor can run. New company settings default to disabled and shadow mode.
+The public fallback cannot call an Apify Actor unless all three relevant controls
+are present. New company settings default to disabled and shadow mode.
+
+Meta access tokens remain encrypted in `social_accounts`; Buyer Finder stores
+only the account relationship and never copies a token into its own tables.
 
 In shadow mode, candidates are visible for review but WhatsApp/profile outreach
 actions are blocked by the API. This must remain enabled for the first pilot.
 
 ## Scheduled work
 
-- Account discovery: Mondays at 02:15 UTC.
+- Connected-account sync and public fallback discovery: Mondays at 02:15 UTC.
 - Recent post and comment scan: every 30 minutes.
 - Qualification: one BullMQ job per new, deduplicated comment.
 - Queue concurrency: one, preventing duplicate allocations inside one deployment.
 
-Posts older than the configured window and posts below the minimum comment
-threshold are ignored before comment scraping.
+Connected sources are read through the Meta Graph API using the company's Page
+token. Owned-source candidates are allocated only to that company. Posts older
+than the configured window and posts below the minimum comment threshold are
+ignored before comment ingestion.
 
 ## AI routing
 
@@ -41,12 +50,13 @@ Deterministic intent rules remain available if both providers are unavailable.
 
 ## Lagos shadow pilot
 
-1. Deploy the migration and application with both global flags set to `false`.
+1. Deploy the migration and application with global flags set to `false`.
 2. Open Buyer Finder and select Lagos.
 3. Enable discovery and leave Shadow review on.
-4. Add `APIFY_TOKEN` to the backend environment.
-5. Verify the configured Actor IDs with a small run in Apify Console.
-6. Set `SCRAPING_ENABLED=true` and `BUYER_FINDER_ENABLED=true`.
+4. Confirm the client's Facebook/Instagram accounts show as healthy sources.
+5. Set `BUYER_FINDER_ENABLED=true` to scan connected accounts.
+6. Only if public fallback is wanted, add `APIFY_TOKEN`, verify the Actor IDs,
+   and set `SCRAPING_ENABLED=true`.
 7. Review the first 100 candidates for accuracy, duplicates, source quality, and
    cost before disabling Shadow review.
 

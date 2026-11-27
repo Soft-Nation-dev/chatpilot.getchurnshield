@@ -7,6 +7,8 @@ import { runActor } from '../../leads/scrapers/apify-client'
 import { scraperConfig } from '../../leads/scrapers/scraper-config'
 import { extractPhone, normalizeNgPhone } from '../../leads/scrapers/extract'
 import { parseState } from '../../leads/scrapers/location'
+import { buyerFinderPublicDiscoveryEnabled } from '../buyer-finder.constants'
+import { BuyerFinderConnectedSourceService } from './buyer-finder-connected-source.service'
 
 type JsonRow = Record<string, any>
 
@@ -17,18 +19,32 @@ export class BuyerFinderIngestionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiRouting: AiRoutingService,
+    private readonly connectedSource: BuyerFinderConnectedSourceService,
   ) {}
 
-  async discover(): Promise<{ states: number; accounts: number }> {
+  async discover(): Promise<{
+    states: number
+    accounts: number
+    connectedAccounts: number
+    publicFallback: boolean
+  }> {
     const settings = await this.prisma.buyer_finder_settings.findMany({
       where: { enabled: true },
-      select: { id: true, target_states: true },
+      select: { id: true, company_id: true, target_states: true },
     })
-    const states = [...new Set(settings.flatMap(row => row.target_states))]
-    let accounts = 0
-    for (const state of states) {
-      accounts += await this.discoverInstagram(state)
-      accounts += await this.discoverFacebook(state)
+    const connected = await this.connectedSource.sync(settings)
+    const fallbackSettings = settings.filter(
+      setting => !connected.companyIds.has(setting.company_id),
+    )
+    const states = [
+      ...new Set(fallbackSettings.flatMap(row => row.target_states)),
+    ]
+    let accounts = connected.accounts
+    if (buyerFinderPublicDiscoveryEnabled()) {
+      for (const state of states) {
+        accounts += await this.discoverInstagram(state)
+        accounts += await this.discoverFacebook(state)
+      }
     }
     if (settings.length) {
       await this.prisma.buyer_finder_settings.updateMany({
@@ -36,7 +52,12 @@ export class BuyerFinderIngestionService {
         data: { last_discovery_at: new Date() },
       })
     }
-    return { states: states.length, accounts }
+    return {
+      states: states.length,
+      accounts,
+      connectedAccounts: connected.accounts,
+      publicFallback: buyerFinderPublicDiscoveryEnabled(),
+    }
   }
 
   async scan(): Promise<{
@@ -48,17 +69,33 @@ export class BuyerFinderIngestionService {
       where: { enabled: true },
       select: {
         id: true,
+        company_id: true,
         target_states: true,
         post_max_age_hours: true,
         min_post_comments: true,
       },
     })
     if (!settings.length) return { accounts: 0, posts: 0, commentIds: [] }
+    const connected = await this.connectedSource.sync(settings)
+    const fallbackCompanyIds = settings
+      .filter(setting => !connected.companyIds.has(setting.company_id))
+      .map(setting => setting.company_id)
     const states = [...new Set(settings.flatMap(row => row.target_states))]
     const maxAgeHours = Math.min(...settings.map(row => row.post_max_age_hours))
     const minComments = Math.min(...settings.map(row => row.min_post_comments))
     const accounts = await this.prisma.buyer_finder_accounts.findMany({
-      where: { status: 'active', states: { hasSome: states } },
+      where: {
+        status: 'active',
+        OR: [
+          {
+            source: 'connected_social',
+            company_id: { in: settings.map(setting => setting.company_id) },
+          },
+          ...(buyerFinderPublicDiscoveryEnabled() && fallbackCompanyIds.length
+            ? [{ source: 'public', states: { hasSome: states } }]
+            : []),
+        ],
+      },
       orderBy: [{ last_scanned_at: 'asc' }, { id: 'asc' }],
     })
     const commentIds: number[] = []
@@ -104,13 +141,14 @@ export class BuyerFinderIngestionService {
         if (post.context_status !== 'ready') {
           await this.enrichPostContext(post.id)
         }
-        const comments = await this.fetchComments(
-          account.platform,
-          post.post_url,
-        )
+        const comments = await this.fetchComments(account, {
+          url: post.post_url,
+          externalId: normalized.rawExternalId,
+        })
         for (const raw of comments) {
           const value = this.normalizeComment(raw, account.platform)
           if (!value) continue
+          if (value.authorExternalId === account.external_id) continue
           const saved = await this.prisma.buyer_finder_comments.upsert({
             where: {
               platform_external_id: {
@@ -300,6 +338,9 @@ export class BuyerFinderIngestionService {
   }
 
   private fetchPosts(account: any, maxAgeHours: number) {
+    if (account.source === 'connected_social') {
+      return this.connectedSource.fetchPosts(account, maxAgeHours)
+    }
     if (account.platform === 'instagram') {
       return runActor<JsonRow>(scraperConfig.apify.instagramActor, {
         directUrls: [account.profile_url],
@@ -317,17 +358,23 @@ export class BuyerFinderIngestionService {
     })
   }
 
-  private fetchComments(platform: string, postUrl: string) {
-    if (platform === 'instagram') {
+  private fetchComments(
+    account: any,
+    post: { url: string; externalId: string },
+  ) {
+    if (account.source === 'connected_social') {
+      return this.connectedSource.fetchComments(account, post.externalId)
+    }
+    if (account.platform === 'instagram') {
       return runActor<JsonRow>(scraperConfig.apify.instagramActor, {
-        directUrls: [postUrl],
+        directUrls: [post.url],
         resultsType: 'comments',
         resultsLimit: scraperConfig.apify.buyerFinderMaxCommentsPerPost,
         isNewestComments: true,
       })
     }
     return runActor<JsonRow>(scraperConfig.apify.fbCommentsActor, {
-      startUrls: [{ url: postUrl }],
+      startUrls: [{ url: post.url }],
       resultsLimit: scraperConfig.apify.buyerFinderMaxCommentsPerPost,
       onlyCommentsNewerThan: '2 days',
       includeNestedComments: false,
@@ -340,6 +387,8 @@ export class BuyerFinderIngestionService {
       row.postUrl,
       row.facebookUrl,
       row.displayUrl,
+      row.permalink,
+      row.permalink_url,
     )
     const externalId = this.string(row.id, row.postId, row.shortCode, url)
     if (!url || !externalId) return null
@@ -348,6 +397,7 @@ export class BuyerFinderIngestionService {
       row.takenAt,
       row.time,
       row.createdAt,
+      row.created_time,
     )
     if (
       publishedAt &&
@@ -356,6 +406,7 @@ export class BuyerFinderIngestionService {
       return null
     }
     return {
+      rawExternalId: externalId,
       externalId: `${platform}-${externalId}`,
       url,
       caption: this.string(row.caption, row.text, row.message, row.description),
@@ -363,6 +414,8 @@ export class BuyerFinderIngestionService {
       commentCount: this.number(
         row.commentsCount,
         row.commentCount,
+        row.comments_count,
+        row.comments?.summary?.total_count,
         row.comments?.length,
       ),
       eligibleUntil: publishedAt
@@ -374,7 +427,7 @@ export class BuyerFinderIngestionService {
   private normalizeComment(row: JsonRow, platform: string) {
     const text = this.string(row.text, row.commentText, row.message)
     if (!text) return null
-    const owner = row.owner || row.user || row.author || {}
+    const owner = row.owner || row.user || row.author || row.from || {}
     const authorHandle = this.string(
       owner.username,
       row.username,

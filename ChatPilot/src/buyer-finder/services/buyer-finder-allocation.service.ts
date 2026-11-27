@@ -10,15 +10,30 @@ export class BuyerFinderAllocationService {
   async allocate(candidateId: number): Promise<number> {
     const candidate = await this.prisma.buyer_finder_candidates.findUnique({
       where: { id: candidateId },
-      include: { comment: true },
+      include: {
+        comment: { include: { post: { include: { account: true } } } },
+      },
     })
     if (!candidate?.is_high_intent || !candidate.location_state) return 0
+
+    const sourceCompanyId = candidate.comment.post.account?.company_id || null
 
     const settings = await this.prisma.buyer_finder_settings.findMany({
       where: {
         enabled: true,
+        min_intent_score: { lte: candidate.intent_score },
         target_states: { has: candidate.location_state },
-        company: { account_status: 'active' },
+        ...(sourceCompanyId ? { company_id: sourceCompanyId } : {}),
+        company: {
+          account_status: 'active',
+          ...(!sourceCompanyId
+            ? {
+                buyer_finder_accounts: {
+                  none: { source: 'connected_social', status: 'active' },
+                },
+              }
+            : {}),
+        },
       },
       include: {
         company: { select: { id: true, name: true } },
@@ -40,10 +55,9 @@ export class BuyerFinderAllocationService {
         (byCompany.get(a.company_id) || 0) - (byCompany.get(b.company_id) || 0)
       return countDifference || a.company_id - b.company_id
     })
-    const maximumRecipients = Math.min(
-      2,
-      Math.max(1, ...ordered.map(row => row.exclusivity_limit)),
-    )
+    const maximumRecipients = sourceCompanyId
+      ? 1
+      : Math.min(2, Math.max(1, ...ordered.map(row => row.exclusivity_limit)))
 
     let created = 0
     for (const setting of ordered.slice(0, maximumRecipients)) {

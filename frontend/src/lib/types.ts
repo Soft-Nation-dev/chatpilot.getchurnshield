@@ -26,13 +26,7 @@ export interface Company {
   assistant_id: number | null
   account_status: 'active' | 'suspended'
   subscription_plan: string
-  subscription_status:
-    | 'pending'
-    | 'trialing'
-    | 'active'
-    | 'past_due'
-    | 'cancelled'
-    | 'expired'
+  subscription_status: 'pending' | 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired'
   subscription_started_at: string | null
   subscription_expires_at: string | null
   suspended_at: string | null
@@ -122,9 +116,25 @@ export interface BuyerFinderSettings {
   min_intent_score: number
   daily_outreach_limit: number
   global_enabled: boolean
+  public_fallback_enabled: boolean
   operating_mode: 'off' | 'shadow' | 'live'
   last_discovery_at: string | null
   last_scan_at: string | null
+  sources: {
+    connected_count: number
+    healthy_count: number
+    public_fallback_active: boolean
+    accounts: Array<{
+      id: number
+      platform: 'facebook' | 'instagram'
+      name: string | null
+      username: string | null
+      status: string
+      last_scanned_at: string | null
+      token_expires_at: string | null
+      error: string | null
+    }>
+  }
 }
 
 export interface BuyerFinderCandidate {
@@ -152,6 +162,11 @@ export interface BuyerFinderCandidate {
     property_type: string | null
     specific_location: string | null
     published_at: string | null
+  }
+  source: {
+    type: 'connected_social' | 'public'
+    name: string | null
+    platform: 'facebook' | 'instagram'
   }
 }
 

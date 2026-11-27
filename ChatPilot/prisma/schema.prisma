@@ -52,6 +52,7 @@ model companies {
   automation_events           automation_events[]
   chat_state_transitions      chat_state_transitions[]
   buyer_finder_settings       buyer_finder_settings?
+  buyer_finder_accounts       buyer_finder_accounts[]
   buyer_finder_allocations    buyer_finder_allocations[]
 
   @@index([account_status])
@@ -335,22 +336,28 @@ model buyer_finder_settings {
 }
 
 model buyer_finder_accounts {
-  id              Int                  @id @default(autoincrement())
-  platform        String               @db.VarChar(20)
-  external_id     String               @db.VarChar(180)
-  profile_url     String
-  display_name    String?
-  handle          String?              @db.VarChar(180)
-  states          String[]
-  follower_count  Int                  @default(0)
-  account_type    String?              @db.VarChar(30)
-  status          String               @default("active") @db.VarChar(20)
-  last_scanned_at DateTime?            @db.Timestamptz(6)
-  discovered_at   DateTime             @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime             @updatedAt @db.Timestamptz(6)
-  posts           buyer_finder_posts[]
+  id                Int                  @id @default(autoincrement())
+  company_id        Int?
+  social_account_id Int?                 @unique
+  platform          String               @db.VarChar(20)
+  external_id       String               @db.VarChar(180)
+  profile_url       String
+  display_name      String?
+  handle            String?              @db.VarChar(180)
+  states            String[]
+  follower_count    Int                  @default(0)
+  account_type      String?              @db.VarChar(30)
+  source            String               @default("public") @db.VarChar(24)
+  status            String               @default("active") @db.VarChar(20)
+  last_scanned_at   DateTime?            @db.Timestamptz(6)
+  discovered_at     DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime             @updatedAt @db.Timestamptz(6)
+  company           companies?           @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  social_account    social_accounts?     @relation(fields: [social_account_id], references: [id], onDelete: Cascade)
+  posts             buyer_finder_posts[]
 
   @@unique([platform, external_id])
+  @@index([company_id, source, status])
   @@index([platform, status])
 }
 
@@ -582,23 +589,24 @@ model audit_logs {
 }
 
 model social_accounts {
-  id               Int       @id @default(autoincrement())
-  company_id       Int
-  platform         String    @db.VarChar(20)
-  external_id      String    @db.VarChar
-  page_id          String?   @db.VarChar
-  ig_user_id       String?   @db.VarChar
-  name             String?   @db.VarChar
-  username         String?   @db.VarChar
-  access_token     String
-  token_expires_at DateTime? @db.Timestamptz(6)
-  scopes           String?
-  is_active        Boolean   @default(true)
-  subscribed_at    DateTime? @db.Timestamptz(6)
-  last_error       String?
-  created_at       DateTime  @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime? @updatedAt @db.Timestamptz(6)
-  company          companies @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  id                   Int                    @id @default(autoincrement())
+  company_id           Int
+  platform             String                 @db.VarChar(20)
+  external_id          String                 @db.VarChar
+  page_id              String?                @db.VarChar
+  ig_user_id           String?                @db.VarChar
+  name                 String?                @db.VarChar
+  username             String?                @db.VarChar
+  access_token         String
+  token_expires_at     DateTime?              @db.Timestamptz(6)
+  scopes               String?
+  is_active            Boolean                @default(true)
+  subscribed_at        DateTime?              @db.Timestamptz(6)
+  last_error           String?
+  created_at           DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime?              @updatedAt @db.Timestamptz(6)
+  company              companies              @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  buyer_finder_account buyer_finder_accounts?
 
   @@unique([platform, external_id])
   @@index([company_id])

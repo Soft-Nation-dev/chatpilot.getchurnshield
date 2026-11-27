@@ -49,7 +49,11 @@ export const BUYER_FINDER_ALLOWED_STATES = [
 export const buyerFinderGloballyEnabled = () =>
   ['1', 'true'].includes(
     String(process.env.BUYER_FINDER_ENABLED || 'false').toLowerCase(),
-  ) &&
+  )
+
+export const buyerFinderPublicDiscoveryEnabled = () =>
+  buyerFinderGloballyEnabled() &&
   ['1', 'true'].includes(
     String(process.env.SCRAPING_ENABLED || 'false').toLowerCase(),
-  )
+  ) &&
+  Boolean(process.env.APIFY_TOKEN)

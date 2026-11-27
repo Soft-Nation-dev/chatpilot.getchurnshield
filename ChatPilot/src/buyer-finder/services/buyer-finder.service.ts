@@ -4,11 +4,18 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import { PrismaService } from '../../prisma/prisma.service'
-import { buyerFinderGloballyEnabled } from '../buyer-finder.constants'
+import {
+  buyerFinderGloballyEnabled,
+  buyerFinderPublicDiscoveryEnabled,
+} from '../buyer-finder.constants'
+import { BuyerFinderConnectedSourceService } from './buyer-finder-connected-source.service'
 
 @Injectable()
 export class BuyerFinderService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly connectedSource: BuyerFinderConnectedSourceService,
+  ) {}
 
   async getSettings(companyId: number) {
     const settings = await this.prisma.buyer_finder_settings.upsert({
@@ -16,9 +23,18 @@ export class BuyerFinderService {
       create: { company_id: companyId },
       update: {},
     })
+    await this.connectedSource.sync([
+      {
+        company_id: companyId,
+        target_states: settings.target_states,
+      },
+    ])
+    const sources = await this.connectedSource.status(companyId)
     return {
       ...settings,
       global_enabled: buyerFinderGloballyEnabled(),
+      public_fallback_enabled: buyerFinderPublicDiscoveryEnabled(),
+      sources,
       operating_mode: !settings.enabled
         ? 'off'
         : settings.shadow_mode
@@ -75,7 +91,9 @@ export class BuyerFinderService {
       include: {
         candidate: {
           include: {
-            comment: { include: { post: true } },
+            comment: {
+              include: { post: { include: { account: true } } },
+            },
           },
         },
         events: { orderBy: { created_at: 'desc' }, take: 5 },
@@ -109,6 +127,11 @@ export class BuyerFinderService {
         property_type: row.candidate.comment.post.property_type,
         specific_location: row.candidate.comment.post.specific_location,
         published_at: row.candidate.comment.post.published_at,
+      },
+      source: {
+        type: row.candidate.comment.post.account?.source || 'public',
+        name: row.candidate.comment.post.account?.display_name || null,
+        platform: row.candidate.comment.post.platform,
       },
       events: row.events,
     }))
